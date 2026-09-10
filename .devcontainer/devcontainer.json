@@ -1,0 +1,40 @@
+{
+  "name": "TC6035 Part 1",
+
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
+
+  // PLATFORM: must match the base image digest pinned in Dockerfile.
+  // Switching platforms means changing BOTH. See Dockerfile header.
+  "runArgs": ["--platform=linux/amd64"],
+
+  "workspaceFolder": "/workspace",
+  "remoteUser": "student",
+
+  "containerEnv": {
+    "OMP_NUM_THREADS": "1",
+    "OPENBLAS_NUM_THREADS": "1",
+    "MKL_NUM_THREADS": "1",
+    "NUMEXPR_NUM_THREADS": "1",
+    "VECLIB_MAXIMUM_THREADS": "1",
+    "PYTHONHASHSEED": "0"
+  },
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-toolsai.jupyter",
+        "ms-toolsai.vscode-jupyter-cell-tags"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python",
+        "jupyter.askForKernelRestart": false
+      }
+    }
+  },
+
+  "postCreateCommand": "python scripts/verify_environment.py"
+}

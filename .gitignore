@@ -1,0 +1,7 @@
+# Your run logs are part of the submission — do NOT ignore results/
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+.pytest_cache/
+.DS_Store
+.otter_env
