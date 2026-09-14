@@ -16,6 +16,7 @@ evidence, not a convenience.
 from __future__ import annotations
 
 from collections import deque
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -173,6 +174,31 @@ class SensorPlacementProblem:
             seed=seed if seed is not None else -1,
             budget=self.budget,
         )
+
+    @contextmanager
+    def limited(self, evaluations: int):
+        """Temporarily cap this problem at ``evaluations`` more evaluations.
+
+        For hybrids. A two-stage algorithm must carve its stages out of ONE
+        budget, and the tempting shortcut -- building a second
+        ``SensorPlacementProblem`` for stage one -- silently doubles the budget
+        and produces a result no honest single-budget run could reach.
+
+            with problem.limited(3000):
+                subset = choose_subset(problem, seed)   # stops at 3000
+            tune_power(problem, seed, subset)           # spends what is left
+
+        One counter, one trajectory, one cap. The outer budget is restored on
+        exit, so the second stage sees exactly the remainder.
+        """
+        if evaluations < 0:
+            raise ValueError("a stage budget cannot be negative")
+        outer = self.budget
+        self.budget = min(outer, self._used + int(evaluations))
+        try:
+            yield self
+        finally:
+            self.budget = outer
 
     def _charge(self, n: int) -> None:
         if self._used + n > self.budget:

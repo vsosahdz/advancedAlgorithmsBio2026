@@ -47,7 +47,17 @@ def aco(problem, seed, **params) -> float:
     raise NotImplementedError("M2 Question 4")
 
 
-# def hybrid(problem, seed, **params) -> float:        # M3
+def hybrid(problem, seed, **params) -> float:
+    """Combine at least two approaches. ONE budget:
+
+        with problem.limited(int(problem.budget * split)):
+            subset = ...          # stage one stops here
+        tune_power(problem, seed, subset)   # spends the remainder
+
+    Creating a second SensorPlacementProblem for stage one silently doubles
+    your budget and the autograder will catch it.
+    """
+    raise NotImplementedError("M3 Question 2")
 
 
 ALGORITHMS = {
@@ -56,4 +66,5 @@ ALGORITHMS = {
     "tabu_search": tabu_search,
     "pso": pso,
     "aco": aco,
+    "hybrid": hybrid,
 }
