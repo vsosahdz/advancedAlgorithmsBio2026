@@ -31,8 +31,16 @@ def simulated_annealing(problem, seed, **params) -> float:
     raise NotImplementedError("M0 Question 7")
 
 
-# def tabu_search(problem, seed, **params) -> float:   # M1
-# def pso(problem, seed, **params) -> float:           # M1 / M2
+def tabu_search(problem, seed, **params) -> float:
+    """Short-term memory over the discrete layer. Justify tenure and aspiration."""
+    raise NotImplementedError("M1 Question 1")
+
+
+def pso(problem, seed, **params) -> float:
+    """Swarm over the continuous layer. Report your topology."""
+    raise NotImplementedError("M1 Question 3")
+
+
 # def aco(problem, seed, **params) -> float:           # M2 / M3
 # def hybrid(problem, seed, **params) -> float:        # M3
 
@@ -40,4 +48,6 @@ def simulated_annealing(problem, seed, **params) -> float:
 ALGORITHMS = {
     "monte_carlo": monte_carlo,
     "simulated_annealing": simulated_annealing,
+    "tabu_search": tabu_search,
+    "pso": pso,
 }
