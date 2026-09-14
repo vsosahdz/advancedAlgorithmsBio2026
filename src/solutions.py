@@ -41,7 +41,12 @@ def pso(problem, seed, **params) -> float:
     raise NotImplementedError("M1 Question 3")
 
 
-# def aco(problem, seed, **params) -> float:           # M2 / M3
+def aco(problem, seed, **params) -> float:
+    """Subset construction on pheromone. Not a tour: sites, not edges.
+    Use MMAS-style bounds and show they are binding."""
+    raise NotImplementedError("M2 Question 4")
+
+
 # def hybrid(problem, seed, **params) -> float:        # M3
 
 
@@ -50,4 +55,5 @@ ALGORITHMS = {
     "simulated_annealing": simulated_annealing,
     "tabu_search": tabu_search,
     "pso": pso,
+    "aco": aco,
 }

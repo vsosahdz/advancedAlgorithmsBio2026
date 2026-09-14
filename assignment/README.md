@@ -121,9 +121,12 @@ work is designed so it cannot be assembled the night before.
 2. **Stability analysis.** Locate your chosen `(w, c1, c2)` in the
    Clerc–Kennedy stability region. If your parameters are outside it, explain
    what you observe and why.
-3. **Diagnose stagnation.** Identify a run where your swarm converged
-   prematurely, and support the diagnosis with a diversity measure over time —
-   not by eye.
+3. **Stagnation — decide with a measure.** Determine *whether* your swarm
+   converged prematurely, supporting the answer with a dispersion measure over
+   time rather than by eye. Either answer is correct. If your runs improve until
+   the budget runs out, your binding constraint is the budget rather than
+   diversity, and saying so is a finding — reporting stagnation you did not
+   observe is not.
 4. **Initial ACO** as subset construction over the discrete layer.
 
 > **Carry forward to M3:** your best PSO configuration, with the evidence that
