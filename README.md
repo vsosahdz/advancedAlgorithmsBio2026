@@ -1,7 +1,7 @@
 # TC6035 Part 1 — capstone assignment
 
 Advanced Algorithms and Bioinspired Techniques · doctoral programme
-Tecnológico de Monterrey
+Tecnológico de Monterrey · Prof. Víctor Adrián Sosa Hernández
 
 Everything you need is here. Read [`assignment/README.md`](assignment/README.md)
 first — it is the specification you are graded against.

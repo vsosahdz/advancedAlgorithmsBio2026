@@ -1,5 +1,6 @@
 # TC6035 Part 1 — Capstone Assignment
 
+**Instructor:** Prof. Víctor Adrián Sosa Hernández
 **Released:** Session 1 · **Due:** one week after Session 4 · **Weight:** the whole of Part 1's 25%
 
 You will design, tune and compare four metaheuristics on a problem instance that
