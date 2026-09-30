@@ -213,7 +213,13 @@ class SensorPlacementProblem:
     # -- evaluation --------------------------------------------------------
 
     def evaluate(self, active: np.ndarray, power: np.ndarray) -> float:
-        """Evaluate one solution. Costs one evaluation."""
+        """Evaluate one solution. Costs one evaluation.
+
+        **Higher is better.** This is a maximization problem, which is worth
+        stating because most metaheuristics literature is written for
+        minimization: a comparison copied from a textbook will point the wrong
+        way and the search will run backwards without raising anything.
+        """
         self._charge(1)
         result = self._objective(active, power)
         self._log(result.objective)
