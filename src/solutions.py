@@ -1,21 +1,19 @@
 """Your algorithm implementations.
 
-The autograder re-executes a sample of your runs and compares the numbers
-against what you reported, so your algorithms have to be reachable from outside
-your notebooks. That is the only thing this file constrains.
+Your algorithms live here, separate from the analysis in your notebooks. That
+separation is worth keeping for two reasons: each milestone can reuse the last
+one's code without copying cells, and you can re-run an algorithm months later
+without hunting for which notebook held the working version.
 
-Three requirements:
+Two requirements:
 
   1. callable as  fn(problem, seed, **params) -> float
   2. DETERMINISTIC in (problem, seed, params) — same inputs, same trajectory.
      Seed every generator explicitly; never use the unseeded `random` module.
-  3. your notebooks import from here, so the logs describe the code that will
-     actually be re-executed
+     A result you cannot regenerate is a result you cannot defend in the video.
 
 Everything else — representation, neighbourhood, tuning, hybridisation — is
-yours. Register each algorithm in ALGORITHMS under the name the milestone asks
-for; a run logged under a name that is not here cannot be re-executed and earns
-nothing for reproducibility.
+yours.
 """
 
 import numpy as np
@@ -55,7 +53,7 @@ def hybrid(problem, seed, **params) -> float:
         tune_power(problem, seed, subset)   # spends the remainder
 
     Creating a second SensorPlacementProblem for stage one silently doubles
-    your budget and the autograder will catch it.
+    your budget, which no honest single-budget run could reach.
     """
     raise NotImplementedError("M3 Question 2")
 

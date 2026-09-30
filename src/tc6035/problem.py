@@ -8,9 +8,9 @@ constraint of the assignment rather than a suggestion. Exceeding it raises
 rather than returning a value: a run cannot quietly consume more budget than it
 declares.
 
-Second, it **records** every evaluation. The autograder re-executes a sample of
-each submission's runs and compares against the recorded trace, so the trace is
-evidence, not a convenience.
+Second, it **records** every evaluation. That trace is what your convergence
+figures are drawn from, and what lets you answer "where did my budget go?" with
+a number instead of an impression.
 """
 
 from __future__ import annotations

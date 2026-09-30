@@ -7,6 +7,11 @@ Public surface used by student notebooks:
 Everything else is either instructor-side or internal.
 """
 
+from .diagnostics import (
+    last_improvement_fraction,
+    selection_entropy,
+    swarm_diversity,
+)
 from .instance import Instance, InstanceSpec, build_instance, coverage_radius, seed_from_student_id
 from .problem import (
     DEFAULT_BUDGET,
@@ -17,6 +22,9 @@ from .problem import (
 )
 
 __all__ = [
+    "selection_entropy",
+    "swarm_diversity",
+    "last_improvement_fraction",
     "Instance",
     "InstanceSpec",
     "build_instance",

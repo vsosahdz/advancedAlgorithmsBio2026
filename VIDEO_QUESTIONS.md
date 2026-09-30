@@ -33,8 +33,8 @@ Five minutes total, including the two questions. Have your figures on screen.
 
 5. Show one convergence curve. Explain what is happening at the point where it
    flattens.
-6. Identify a run of yours that stagnated. What is your evidence that it
-   stagnated rather than converged?
+6. Determine whether any of your runs stagnated, and show the evidence either
+   way. "None of mine did, and here is how I know" is a complete answer.
 7. Your best and median runs differ. Show both and explain the gap.
 8. Point to the iteration where your best-so-far last improved. What does the
    budget spent after that tell you about your configuration?
@@ -71,7 +71,7 @@ Five minutes total, including the two questions. Have your figures on screen.
 21. Your effect size: is your significant difference also a difference that
     matters? Argue either way from your numbers.
 22. What does your comparison *not* license you to claim?
-23. **Teams:** did your ranking hold across both instances? If it inverted, what
+23. **Pairs:** did your ranking hold across both instances? If it inverted, what
     does that mean; if it held, why is that not proof of general superiority?
 
 ## F · Your process
@@ -85,9 +85,16 @@ Five minutes total, including the two questions. Have your figures on screen.
 
 ## How this is marked
 
-The video produces an **individual multiplier** on your team's score, capped at
-1.0 — it can confirm or reduce your grade, never raise it above the team's.
-Bands are in [`RUBRIC.md`](RUBRIC.md).
+The video produces an **individual multiplier** on the notebook score, capped
+at 1.0 — it can confirm or reduce your grade, never raise it above what the
+notebook earned. The bands are in §12 of the assignment specification, "How
+this is graded".
 
-In a team, **both members record separately**, each drawing their own questions.
-No video means a zero multiplier regardless of how good the submission is.
+In a pair, **both members record separately**, each drawing their own questions,
+and each receives their own multiplier. No video means a zero multiplier
+regardless of how good the submission is.
+
+**The video is submitted with M3**, not with each milestone: paste the link
+(Drive, OneDrive or unlisted YouTube) into the last cell of your M3 notebook,
+and confirm your instructor can open it before you submit. Five minutes
+maximum — see §10 of the specification.

@@ -1,7 +1,7 @@
 # AI Ledger — required deliverable
 
-Copy this file to the root of your repository as `AI_LEDGER.md` and fill it in
-**as you work**, not afterwards. A ledger reconstructed at the end is usually
+This is the structure your notebook's `# AI Ledger` section must follow. Fill
+it in **as you work**, not afterwards. A ledger reconstructed at the end is usually
 visible as one, and it defeats the purpose.
 
 ## Why this exists
@@ -120,5 +120,5 @@ The single most likely place for an assistant to be confidently wrong in this
 assignment is the **statistical comparison**. Asked to compare metaheuristics,
 models very often reach for a t-test, or report best-of-N without dispersion.
 Both are rejection-worthy errors in this literature. If you accepted such a
-suggestion without noticing, the autograder will find it — and it would have
-made an excellent Section 3.
+suggestion without noticing, it will come up in your video defence — and it
+would have made an excellent Section 3.

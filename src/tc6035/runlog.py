@@ -1,15 +1,13 @@
-"""Persistence for run evidence.
+"""Persistence for run results.
 
-The autograder re-executes a sample of each submission's runs and compares the
-resulting values against what was recorded. That comparison is exact, so the
-format must preserve float64 bit-for-bit: trajectories go into a compressed
-``.npz`` rather than JSON, where rounding would silently destroy the very thing
-being checked.
+Thirty seeds per configuration across several algorithms is more data than fits
+comfortably in a notebook's memory between sessions, and you will want to redraw
+figures without re-running anything. Save the runs.
 
-An environment fingerprint travels with every run set. If a submission was
-produced outside the pinned container, the mismatch is then visible as a
-mismatch rather than surfacing later as an unexplained "fabricated results"
-flag against an honest student.
+Trajectories go into a compressed ``.npz`` rather than JSON because float64
+survives it exactly -- a rounded trajectory quietly changes the curves you drew
+from it. An environment fingerprint travels with each set so that a result you
+cannot reproduce six weeks later has a visible explanation.
 """
 
 from __future__ import annotations
@@ -154,12 +152,12 @@ def load_runset(path: str | Path) -> LoadedRunSet:
 def compare_trajectories(
     recorded: np.ndarray, replayed: np.ndarray, *, exact: bool = True
 ) -> tuple[bool, str]:
-    """Compare a recorded trajectory against a re-execution.
+    """Compare a recorded trajectory against a fresh run of the same seed.
 
-    Exact by default. The pinned container is what makes that sound; falling
-    back to a tolerance weakens the check to something a plausible fabricated
-    result could pass, so ``exact=False`` should be used only if the container
-    requirement is ever relaxed, and the relaxation recorded.
+    Useful to yourself: if you changed a parameter you thought was cosmetic,
+    this tells you whether it was. Exact by default, since a seeded run on the
+    same machine should reproduce bit for bit; pass ``exact=False`` when
+    comparing across machines, where the last bits legitimately differ.
     """
     if recorded.shape != replayed.shape:
         return False, (
@@ -216,7 +214,11 @@ def runsets_from_directory(directory: str | Path) -> list[LoadedRunSet]:
 
 
 def as_json_summary(runsets: Sequence[LoadedRunSet]) -> str:
-    """Human- and machine-readable summary, for the autograder's evidence report."""
+    """Human- and machine-readable summary of a set of run sets.
+
+    Paste it into your analysis section when you want the medians and the
+    budget actually spent stated as numbers rather than read off a figure.
+    """
     return json.dumps(
         [
             {
