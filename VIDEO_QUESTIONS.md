@@ -87,8 +87,8 @@ Five minutes total, including the two questions. Have your figures on screen.
 
 The video produces an **individual multiplier** on the notebook score, capped
 at 1.0 — it can confirm or reduce your grade, never raise it above what the
-notebook earned. The bands are in §12 of the assignment specification, "How
-this is graded".
+notebook earned. The bands are in §14 of the assignment specification,
+"Evaluation rubric".
 
 In a pair, **both members record separately**, each drawing their own questions,
 and each receives their own multiplier. No video means a zero multiplier
