@@ -87,8 +87,7 @@ Five minutes total, including the two questions. Have your figures on screen.
 
 The video produces an **individual multiplier** on the notebook score, capped
 at 1.0 — it can confirm or reduce your grade, never raise it above what the
-notebook earned. The bands are in §14 of the assignment specification,
-"Evaluation rubric".
+notebook earned. The bands are in §13 of the assignment specification, "Rubric".
 
 In a pair, **both members record separately**, each drawing their own questions,
 and each receives their own multiplier. No video means a zero multiplier
@@ -97,4 +96,4 @@ regardless of how good the submission is.
 **The video is submitted with M3**, not with each milestone: paste the link
 (Drive, OneDrive or unlisted YouTube) into the last cell of your M3 notebook,
 and confirm your instructor can open it before you submit. Five minutes
-maximum — see §10 of the specification.
+maximum — see §11 of the specification.
