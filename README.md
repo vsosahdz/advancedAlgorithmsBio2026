@@ -102,9 +102,25 @@ and you cannot know it in advance.
 
 ---
 
+## The lecture slides
+
+`slides/` holds the sessions already covered, with their interactive
+animations. Open the HTML file in a browser — no server needed.
+
+```
+slides/lesson-01.html    landscapes · no free lunch · Monte Carlo · annealing
+slides/lesson-02.html    tabu search · particle swarm optimization
+slides/anim/             the animations, opened by the decks and on their own
+```
+
+The animations are worth driving yourself rather than only watching. Each one
+has controls, and the parameters you change there are the same ones you have to
+justify in your submission.
+
 ## What is in here
 
 ```
+slides/               lecture decks and their animations
 notebooks/            one per milestone
 src/tc6035/           the problem library — read it, do not modify it
 src/solutions.py      where YOUR algorithms go

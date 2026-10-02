@@ -1,0 +1,476 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tabu search — the list is what makes descent safe</title>
+<style>
+  :root {
+    --bg:#0f1115; --panel:#171a21; --line:#2a2f3a; --ink:#e8eaf0; --muted:#9aa3b2;
+    --hot:#ff6b5a; --cold:#4ea1ff; --ok:#3ddc84; --warn:#ffc44d;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+    font:15px/1.5 ui-sans-serif,-apple-system,"Segoe UI",Roboto,sans-serif; }
+  .wrap { max-width:1180px; margin:0 auto; padding:20px; }
+  h1 { font-size:20px; margin:0 0 2px; font-weight:650; }
+  .sub { color:var(--muted); font-size:13px; margin-bottom:16px; }
+  .grid { display:grid; grid-template-columns:1fr 330px; gap:16px; align-items:start; }
+  @media (max-width:900px){ .grid{grid-template-columns:1fr;} }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px; }
+  canvas { width:100%; height:auto; display:block; border-radius:6px; background:#0a0c10; }
+  .row { display:flex; align-items:center; gap:10px; margin:9px 0; }
+  label { font-size:13px; color:var(--muted); min-width:104px; }
+  input[type=range]{ flex:1; accent-color:var(--hot); }
+  input[type=number]{ width:100px; background:#0c0e12; color:var(--ink); border:1px solid var(--line);
+    border-radius:6px; padding:5px 7px; font:inherit; font-size:13px; }
+  input[type=checkbox]{ accent-color:var(--hot); width:16px; height:16px; }
+  .val { font-variant-numeric:tabular-nums; min-width:56px; text-align:right; font-size:13px; }
+  button { background:#222836; color:var(--ink); border:1px solid var(--line); border-radius:7px;
+    padding:7px 13px; font:inherit; font-size:13px; cursor:pointer; }
+  button:hover{ background:#2b3244; }
+  button.primary{ background:var(--hot); color:#1a0603; border-color:var(--hot); font-weight:600; }
+  table { width:100%; border-collapse:collapse; font-size:13px; margin-top:8px; }
+  td { padding:4px 6px; border-bottom:1px solid var(--line); font-variant-numeric:tabular-nums; }
+  td:last-child { text-align:right; }
+  td:first-child { color:var(--muted); }
+  .note { color:var(--muted); font-size:12px; margin-top:10px; line-height:1.5; }
+  .legend { display:flex; gap:14px; flex-wrap:wrap; font-size:12px; color:var(--muted); margin-top:8px; }
+  .chip { display:inline-flex; align-items:center; gap:5px; }
+  .dot { width:9px; height:9px; border-radius:50%; }
+  .big { font-size:22px; font-variant-numeric:tabular-nums; }
+  .verdict { margin-top:10px; padding:9px 11px; border-radius:7px; font-size:12.5px; line-height:1.5;
+    border:1px solid var(--line); background:#0c0e12; color:var(--muted); }
+  .verdict b { color:var(--ink); }
+  h2 { font-size:13px; color:var(--muted); margin:0 0 8px; font-weight:600;
+    text-transform:uppercase; letter-spacing:.04em; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Tabu search — the list is what makes descent safe</h1>
+  <div class="sub">The discrete layer of your assignment, in miniature: choose which of 24 sites to
+    activate. One move = flip one site. The tabu list forbids flipping an index back for
+    <i>tenure</i> iterations.</div>
+
+  <div class="grid">
+    <div>
+      <div class="panel">
+        <h2>The instance — 24 candidate sites, 180 demand points</h2>
+        <canvas id="field" width="760" height="300"></canvas>
+        <div class="legend">
+          <span class="chip"><span class="dot" style="background:var(--ok)"></span>active site</span>
+          <span class="chip"><span class="dot" style="background:#3b424f"></span>inactive site</span>
+          <span class="chip"><span class="dot" style="background:var(--warn)"></span>just flipped</span>
+          <span class="chip"><span class="dot" style="background:var(--cold)"></span>covered demand</span>
+          <span class="chip"><span class="dot" style="background:#4b5261"></span>uncovered demand</span>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-top:14px">
+        <h2>The tabu list — iterations remaining per index</h2>
+        <canvas id="tabu" width="760" height="86"></canvas>
+        <div class="note">A red cell is forbidden. The number is how many more iterations it stays
+          that way. A cell outlined in yellow was overridden by aspiration.</div>
+      </div>
+
+      <div class="panel" style="margin-top:14px">
+        <h2>Objective over the run</h2>
+        <canvas id="trace" width="760" height="170"></canvas>
+        <div class="legend">
+          <span class="chip"><span class="dot" style="background:var(--hot)"></span>current f (the search accepts worsening moves)</span>
+          <span class="chip"><span class="dot" style="background:var(--ok)"></span>best so far</span>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="panel">
+        <h2>Controls</h2>
+        <div class="row">
+          <label for="tenure">tenure</label>
+          <input id="tenure" type="range" min="0" max="24" value="5">
+          <span class="val" id="tenurev">5</span>
+        </div>
+        <div class="row">
+          <label for="cand">candidate list</label>
+          <input id="cand" type="range" min="2" max="24" value="24">
+          <span class="val" id="candv">24 / 24</span>
+        </div>
+        <div class="row">
+          <label for="asp">aspiration</label>
+          <input id="asp" type="checkbox" checked>
+          <span class="val" style="flex:1; text-align:left; color:var(--muted)">override the ban on a new best</span>
+        </div>
+        <div class="row">
+          <label for="speed">speed</label>
+          <input id="speed" type="range" min="1" max="30" value="6">
+          <span class="val" id="speedv">6</span>
+        </div>
+        <div class="row">
+          <label for="seed">seed</label>
+          <input id="seed" type="number" value="20260930" step="1">
+        </div>
+        <div class="row">
+          <button id="play" class="primary">Play</button>
+          <button id="step">Step</button>
+          <button id="reset">Reset</button>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-top:14px">
+        <h2>Readout</h2>
+        <table>
+          <tr><td>evaluations</td><td id="ev">0 / 1200</td></tr>
+          <tr><td>iterations</td><td id="it">0</td></tr>
+          <tr><td>current f</td><td id="cur">—</td></tr>
+          <tr><td>best f</td><td id="best">—</td></tr>
+          <tr><td>active sites</td><td id="k">—</td></tr>
+          <tr><td>moves that made it worse</td><td id="worse">0</td></tr>
+          <tr><td>aspiration overrides</td><td id="aspn">0</td></tr>
+          <tr><td>distinct solutions visited</td><td id="distinct" class="big">0</td></tr>
+        </table>
+        <div class="verdict" id="verdict">Press Play.</div>
+      </div>
+
+      <div class="panel" style="margin-top:14px">
+        <h2>Try this</h2>
+        <div class="note" style="margin-top:0">
+          <b style="color:var(--ink)">tenure = 0.</b> The ban never applies. The search walks to the
+          best neighbour, then straight back, forever. Watch <i>distinct solutions</i> stop growing
+          while the budget drains.<br><br>
+          <b style="color:var(--ink)">tenure = 24.</b> Every index is forbidden at once. The search
+          is fenced out of its own neighbourhood and has to take whatever is left.<br><br>
+          <b style="color:var(--ink)">candidate list = 2.</b> Each iteration costs a twelfth as
+          much, so the budget buys twelve times the iterations — and on <i>this</i> instance the
+          result gets <i>worse</i> (0.449 against 0.499). With only 24 neighbours, sampling two of
+          them is noise. On your 80-site instance neighbours are far more alike, so sampling is
+          expected to win instead. That contradiction is the point: the list size is an empirical
+          question about <i>your</i> instance, and M1 asks you to answer it.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ---------------------------------------------------------------- utilities
+function rng(seed){ let a=seed>>>0; return function(){ a|=0; a=(a+0x6D2B79F5)|0;
+  let t=Math.imul(a^(a>>>15),1|a); t=(t+Math.imul(t^(t>>>7),61|t))^t;
+  return ((t^(t>>>14))>>>0)/4294967296; }; }
+
+// ---------------------------------------------------------------- instance
+// Fixed seed, deliberately: comparing two tenures is only meaningful on the
+// same instance. The user's seed controls the SEARCH (where it starts, which
+// neighbours it samples), never the problem.
+const N = 24, M = 180, W = 100, H = 58, R = 11;
+// Calibrated, not chosen: at these values plain hill climbing stalls at a local
+// optimum after ~190 of the 1200 evaluations, and tabu beats it on 24 of 30
+// seeds. Lower the activation cost and "switch everything on" wins; raise the
+// coverage radius and every subset is about as good as every other.
+const LAMBDA = 0.85, MU = 0.25;
+
+function buildInstance(){
+  const r = rng(424242);
+  const sites = [];
+  for (let i=0;i<N;i++) sites.push({x: 5 + r()*(W-10), y: 5 + r()*(H-10)});
+  // Demand in three clusters plus a uniform background, so that a small,
+  // well-placed subset beats a large scattered one -- which is what makes a
+  // local optimum exist at all.
+  const hubs = [{x:22,y:16},{x:74,y:20},{x:48,y:45}];
+  const demand = [];
+  for (let j=0;j<M;j++){
+    let x, y;
+    if (j % 4 === 3){ x = r()*W; y = r()*H; }
+    else { const h = hubs[j % 3];
+           x = Math.max(0, Math.min(W, h.x + (r()+r()+r()-1.5)*14));
+           y = Math.max(0, Math.min(H, h.y + (r()+r()+r()-1.5)*9)); }
+    demand.push({x, y, w: 0.35 + r()*0.65});
+  }
+  const totalW = demand.reduce((s,d)=>s+d.w, 0);
+  // Precompute, once, which sites reach which demand point.
+  const reach = demand.map(d => {
+    const out = [];
+    for (let i=0;i<N;i++){
+      const dx = sites[i].x-d.x, dy = sites[i].y-d.y;
+      if (dx*dx+dy*dy <= R*R) out.push(i);
+    }
+    return out;
+  });
+  return {sites, demand, totalW, reach};
+}
+const INST = buildInstance();
+
+// f(z) = coverage  -  LAMBDA * (active fraction)  -  MU * (redundancy)
+// The same three terms as the assignment's objective, and for the same reason:
+// without the activation cost the best answer is "switch everything on", and
+// the discrete layer stops being a search problem.
+function objective(z){
+  let covered = 0, redundant = 0, k = 0;
+  for (let i=0;i<N;i++) if (z[i]) k++;
+  for (let j=0;j<M;j++){
+    const d = INST.demand[j], rj = INST.reach[j];
+    let c = 0;
+    for (let t=0;t<rj.length;t++) if (z[rj[t]]) c++;
+    if (c > 0){ covered += d.w; redundant += d.w * (1 - 1/c); }
+  }
+  return covered/INST.totalW - LAMBDA*(k/N) - MU*(redundant/INST.totalW);
+}
+
+// ---------------------------------------------------------------- the search
+const BUDGET = 1200;
+
+function makeState(seed, tenure, candSize, aspiration){
+  const r = rng(seed);
+  const z = new Uint8Array(N);
+  for (let i=0;i<N;i++) z[i] = r() < 0.35 ? 1 : 0;
+  const f0 = objective(z);
+  return {
+    r, tenure, candSize, aspiration,
+    z, f: f0,
+    bestZ: z.slice(), bestF: f0,
+    // tabuUntil[i] = the iteration at which index i becomes free again
+    tabuUntil: new Int32Array(N),
+    iter: 0, evals: 1,
+    worse: 0, aspUses: 0,
+    lastFlip: -1, lastWasAspiration: false,
+    visited: new Set([z.join("")]),
+    hist: [{f: f0, best: f0}],
+    done: false,
+  };
+}
+
+function sampleIndices(st){
+  if (st.candSize >= N){ const all=[]; for(let i=0;i<N;i++) all.push(i); return all; }
+  // Sample WITHOUT replacement: a repeated index would be charged twice for
+  // one piece of information, which is the budget error the assignment warns
+  // about.
+  const pool=[]; for(let i=0;i<N;i++) pool.push(i);
+  for (let i=pool.length-1;i>0;i--){ const j=Math.floor(st.r()*(i+1)); const t=pool[i]; pool[i]=pool[j]; pool[j]=t; }
+  return pool.slice(0, st.candSize);
+}
+
+function stepOnce(st){
+  if (st.done) return;
+  const cand = sampleIndices(st);
+  if (st.evals + cand.length > BUDGET){ st.done = true; return; }
+
+  let bestIdx = -1, bestVal = -Infinity, bestAsp = false;
+  let fallbackIdx = -1, fallbackUntil = Infinity, fallbackVal = -Infinity;
+
+  for (let t=0;t<cand.length;t++){
+    const i = cand[t];
+    st.z[i] ^= 1;
+    const v = objective(st.z);
+    st.z[i] ^= 1;
+    st.evals++;
+
+    const banned = st.tabuUntil[i] > st.iter;
+    // Aspiration: a ban is overridden only by a move that beats the best
+    // solution seen so far. Anything weaker and the list stops meaning
+    // anything.
+    const aspires = banned && st.aspiration && v > st.bestF;
+
+    if (banned && !aspires){
+      // Remember the least-recently-banned candidate: if every candidate is
+      // forbidden the search must still move, and moving to the oldest ban is
+      // the standard way out.
+      if (st.tabuUntil[i] < fallbackUntil){ fallbackUntil = st.tabuUntil[i]; fallbackIdx = i; fallbackVal = v; }
+      continue;
+    }
+    if (v > bestVal){ bestVal = v; bestIdx = i; bestAsp = aspires; }
+  }
+
+  if (bestIdx < 0){ bestIdx = fallbackIdx; bestVal = fallbackVal; bestAsp = false; }
+  if (bestIdx < 0){ st.done = true; return; }
+
+  // THE move that defines tabu search: take the best neighbour even when it is
+  // worse than where you stand. Without the list this oscillates forever.
+  if (bestVal < st.f) st.worse++;
+  if (bestAsp) st.aspUses++;
+
+  st.z[bestIdx] ^= 1;
+  st.f = bestVal;
+  st.tabuUntil[bestIdx] = st.iter + 1 + st.tenure;
+  st.lastFlip = bestIdx;
+  st.lastWasAspiration = bestAsp;
+  st.iter++;
+
+  if (bestVal > st.bestF){ st.bestF = bestVal; st.bestZ = st.z.slice(); }
+  st.visited.add(st.z.join(""));
+  st.hist.push({f: st.f, best: st.bestF});
+  if (st.evals >= BUDGET) st.done = true;
+}
+
+// ---------------------------------------------------------------- rendering
+if (typeof document !== "undefined") {
+  const $ = id => document.getElementById(id);
+  const fc = $("field").getContext("2d");
+  const tc = $("tabu").getContext("2d");
+  const rc = $("trace").getContext("2d");
+  const SX = 760/W, SY = 300/H;
+
+  let st = null, playing = false, raf = null;
+
+  const tenure = () => +$("tenure").value;
+  const cand   = () => +$("cand").value;
+  const asp    = () => $("asp").checked;
+  const speed  = () => +$("speed").value;
+  const seed   = () => +$("seed").value;
+
+  function reset(){
+    playing = false; $("play").textContent = "Play";
+    if (raf) cancelAnimationFrame(raf);
+    st = makeState(seed(), tenure(), cand(), asp());
+    draw();
+  }
+
+  function drawField(){
+    fc.fillStyle = "#0a0c10"; fc.fillRect(0,0,760,300);
+    const z = st.z;
+    // coverage discs first, so sites and demand sit on top
+    fc.globalAlpha = 0.13;
+    for (let i=0;i<N;i++){
+      if (!z[i]) continue;
+      fc.beginPath();
+      fc.arc(INST.sites[i].x*SX, INST.sites[i].y*SY, R*SX, 0, 6.2832);
+      fc.fillStyle = "#3ddc84"; fc.fill();
+    }
+    fc.globalAlpha = 1;
+    for (let j=0;j<M;j++){
+      const d = INST.demand[j], rj = INST.reach[j];
+      let c = 0; for (let t=0;t<rj.length;t++) if (z[rj[t]]) c++;
+      fc.beginPath();
+      fc.arc(d.x*SX, d.y*SY, 1.2 + d.w*2.2, 0, 6.2832);
+      fc.fillStyle = c > 0 ? "#4ea1ff" : "#4b5261";
+      fc.fill();
+    }
+    for (let i=0;i<N;i++){
+      const s = INST.sites[i];
+      fc.beginPath(); fc.arc(s.x*SX, s.y*SY, 6, 0, 6.2832);
+      fc.fillStyle = z[i] ? "#3ddc84" : "#3b424f"; fc.fill();
+      if (i === st.lastFlip){
+        fc.lineWidth = 2.5; fc.strokeStyle = "#ffc44d";
+        fc.beginPath(); fc.arc(s.x*SX, s.y*SY, 9.5, 0, 6.2832); fc.stroke();
+      }
+      fc.fillStyle = z[i] ? "#0b1f14" : "#9aa3b2";
+      fc.font = "9px ui-sans-serif"; fc.textAlign = "center"; fc.textBaseline = "middle";
+      fc.fillText(String(i), s.x*SX, s.y*SY);
+    }
+  }
+
+  function drawTabu(){
+    tc.fillStyle = "#0a0c10"; tc.fillRect(0,0,760,86);
+    const cw = 760/N;
+    for (let i=0;i<N;i++){
+      const left = st.tabuUntil[i] - st.iter;
+      const banned = left > 0;
+      tc.fillStyle = banned ? "rgba(255,107,90,0.22)" : "#12151b";
+      tc.fillRect(i*cw+2, 14, cw-4, 56);
+      if (i === st.lastFlip && st.lastWasAspiration){
+        tc.lineWidth = 2; tc.strokeStyle = "#ffc44d";
+        tc.strokeRect(i*cw+2, 14, cw-4, 56);
+      }
+      tc.fillStyle = "#9aa3b2"; tc.font = "9px ui-sans-serif";
+      tc.textAlign = "center"; tc.textBaseline = "middle";
+      tc.fillText(String(i), i*cw+cw/2, 8);
+      tc.fillStyle = banned ? "#ff6b5a" : "#39404e";
+      tc.font = banned ? "bold 15px ui-sans-serif" : "13px ui-sans-serif";
+      tc.fillText(banned ? String(left) : "·", i*cw+cw/2, 42);
+      tc.fillStyle = st.z[i] ? "#3ddc84" : "#2a2f3a";
+      tc.fillRect(i*cw+2, 62, cw-4, 6);
+    }
+    tc.fillStyle = "#9aa3b2"; tc.font = "10px ui-sans-serif"; tc.textAlign = "left";
+    tc.fillText("green bar = site is currently active", 4, 80);
+  }
+
+  function drawTrace(){
+    rc.fillStyle = "#0a0c10"; rc.fillRect(0,0,760,170);
+    const h = st.hist; if (h.length < 2) return;
+    let lo = Infinity, hi = -Infinity;
+    for (const p of h){ lo = Math.min(lo, p.f); hi = Math.max(hi, p.best); }
+    const pad = (hi-lo)*0.12 + 1e-6; lo -= pad; hi += pad;
+    // The x axis is EVALUATIONS, not iterations: that is what the budget buys,
+    // and plotting iterations would hide the cost of a full neighbourhood.
+    const xs = k => 6 + (k/(h.length-1)) * 748;
+    const ys = v => 160 - ((v-lo)/(hi-lo)) * 150;
+    rc.strokeStyle = "#1c212b"; rc.lineWidth = 1;
+    for (let g=0; g<=4; g++){ const y = 10 + g*37.5;
+      rc.beginPath(); rc.moveTo(6,y); rc.lineTo(754,y); rc.stroke(); }
+    const line = (key, color) => {
+      rc.beginPath(); rc.strokeStyle = color; rc.lineWidth = 1.8;
+      h.forEach((p,k) => k ? rc.lineTo(xs(k), ys(p[key])) : rc.moveTo(xs(k), ys(p[key])));
+      rc.stroke();
+    };
+    line("f", "#ff6b5a");
+    line("best", "#3ddc84");
+    rc.fillStyle = "#9aa3b2"; rc.font = "10px ui-sans-serif"; rc.textAlign = "left";
+    rc.fillText("iteration →   each one costs " + st.candSize + " evaluations", 8, 166);
+  }
+
+  function verdict(){
+    const v = $("verdict");
+    const ratio = st.visited.size / Math.max(1, st.iter);
+    if (st.iter === 0){ v.innerHTML = "Press Play."; return; }
+    if (st.iter < 6){ v.innerHTML = "Running…"; return; }
+    if (st.tenure === 0 && ratio < 0.25){
+      v.innerHTML = "<b>Cycling.</b> With tenure 0 nothing is forbidden, so the best neighbour of " +
+        "A is B and the best neighbour of B is A. " + st.iter + " iterations have visited only " +
+        st.visited.size + " distinct solutions — the budget is being spent standing still.";
+    } else if (ratio < 0.4){
+      v.innerHTML = "<b>Revisiting.</b> Only " + st.visited.size + " distinct solutions in " +
+        st.iter + " iterations. The memory is too short to keep the search moving forward.";
+    } else if (st.tenure >= N-2){
+      v.innerHTML = "<b>Fenced in.</b> With tenure " + st.tenure + " on " + N + " indices, almost " +
+        "everything is banned at once and the search takes whatever is left rather than what is best.";
+    } else {
+      v.innerHTML = "<b>Moving.</b> " + st.visited.size + " distinct solutions in " + st.iter +
+        " iterations, " + st.worse + " of the accepted moves made things worse. " +
+        "Accepting those is the point; the list is what stops them being undone.";
+    }
+  }
+
+  function draw(){
+    drawField(); drawTabu(); drawTrace();
+    $("ev").textContent = st.evals + " / " + BUDGET;
+    $("it").textContent = st.iter;
+    $("cur").textContent = st.f.toFixed(4);
+    $("best").textContent = st.bestF.toFixed(4);
+    let k=0; for (let i=0;i<N;i++) if (st.z[i]) k++;
+    $("k").textContent = k + " / " + N;
+    $("worse").textContent = st.worse;
+    $("aspn").textContent = st.aspUses;
+    $("distinct").textContent = st.visited.size;
+    verdict();
+  }
+
+  function loop(){
+    if (!playing) return;
+    for (let i=0;i<speed();i++) if (!st.done) stepOnce(st);
+    draw();
+    if (st.done){ playing = false; $("play").textContent = "Play"; return; }
+    raf = requestAnimationFrame(loop);
+  }
+
+  $("play").onclick = () => {
+    if (st.done) reset();
+    playing = !playing;
+    $("play").textContent = playing ? "Pause" : "Play";
+    if (playing) loop();
+  };
+  $("step").onclick = () => { playing=false; $("play").textContent="Play"; stepOnce(st); draw(); };
+  $("reset").onclick = reset;
+
+  $("tenure").oninput = () => { $("tenurev").textContent = tenure(); reset(); };
+  $("cand").oninput   = () => { $("candv").textContent = cand() + " / " + N; reset(); };
+  $("asp").onchange   = reset;
+  $("seed").onchange  = reset;
+  $("speed").oninput  = () => { $("speedv").textContent = speed(); };
+
+  reset();
+}
+
+if (typeof module !== "undefined") module.exports = {makeState, stepOnce, objective, BUDGET, N, INST};
+</script>
+</body>
+</html>

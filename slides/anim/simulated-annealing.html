@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Simulated annealing — temperature, acceptance, escape</title>
+<style>
+  :root {
+    --bg:#0f1115; --panel:#171a21; --line:#2a2f3a; --ink:#e8eaf0; --muted:#9aa3b2;
+    --hot:#ff6b5a; --cold:#4ea1ff; --ok:#3ddc84; --warn:#ffc44d;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+    font:15px/1.5 ui-sans-serif,-apple-system,"Segoe UI",Roboto,sans-serif; }
+  .wrap { max-width:1180px; margin:0 auto; padding:20px; }
+  h1 { font-size:20px; margin:0 0 2px; font-weight:650; }
+  .sub { color:var(--muted); font-size:13px; margin-bottom:16px; }
+  .grid { display:grid; grid-template-columns:1fr 330px; gap:16px; align-items:start; }
+  @media (max-width:900px){ .grid{grid-template-columns:1fr;} }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px; }
+  canvas { width:100%; height:auto; display:block; border-radius:6px; background:#0a0c10; }
+  .row { display:flex; align-items:center; gap:10px; margin:9px 0; }
+  label { font-size:13px; color:var(--muted); min-width:104px; }
+  input[type=range]{ flex:1; accent-color:var(--hot); }
+  input[type=number]{ width:100px; background:#0c0e12; color:var(--ink); border:1px solid var(--line);
+    border-radius:6px; padding:5px 7px; font:inherit; font-size:13px; }
+  .val { font-variant-numeric:tabular-nums; min-width:56px; text-align:right; font-size:13px; }
+  button { background:#222836; color:var(--ink); border:1px solid var(--line); border-radius:7px;
+    padding:7px 13px; font:inherit; font-size:13px; cursor:pointer; }
+  button:hover{ background:#2b3244; }
+  button.primary{ background:var(--hot); color:#1a0603; border-color:var(--hot); font-weight:600; }
+  table { width:100%; border-collapse:collapse; font-size:13px; margin-top:8px; }
+  td { padding:4px 6px; border-bottom:1px solid var(--line); font-variant-numeric:tabular-nums; }
+  td:last-child { text-align:right; }
+  td:first-child { color:var(--muted); }
+  .note { color:var(--muted); font-size:12px; margin-top:10px; line-height:1.5; }
+  .legend { display:flex; gap:14px; flex-wrap:wrap; font-size:12px; color:var(--muted); margin-top:8px; }
+  .chip { display:inline-flex; align-items:center; gap:5px; }
+  .dot { width:9px; height:9px; border-radius:50%; }
+  .big { font-size:22px; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Simulated annealing — why it escapes, and why it stops escaping</h1>
+  <div class="sub">
+    One point, no memory of where it has been, and a temperature that decides how
+    willing it is to get worse.
+  </div>
+
+  <div class="grid">
+    <div class="panel">
+      <canvas id="land" width="760" height="300"></canvas>
+      <div class="legend">
+        <span class="chip"><span class="dot" style="background:var(--ok)"></span> accepted improvement</span>
+        <span class="chip"><span class="dot" style="background:var(--warn)"></span> accepted <em>worsening</em> — this is the mechanism</span>
+        <span class="chip"><span class="dot" style="background:#5b6577"></span> rejected</span>
+        <span class="chip"><span class="dot" style="background:var(--cold)"></span> best found</span>
+      </div>
+      <canvas id="trace" width="760" height="150" style="margin-top:12px"></canvas>
+      <div class="note">
+        Lower strip: temperature (red) and the running acceptance rate of worsening
+        moves (amber), on the same time axis. They fall together — that is the
+        schedule doing its job.
+      </div>
+    </div>
+
+    <div>
+      <div class="panel">
+        <div class="row">
+          <label for="t0">T&#8320; initial</label>
+          <input id="t0" type="range" min="1" max="200" value="150">
+          <span class="val" id="t0v">1.50</span>
+        </div>
+        <div class="row">
+          <label for="alpha">Cooling &alpha;</label>
+          <input id="alpha" type="range" min="900" max="9999" value="9970">
+          <span class="val" id="alphav">0.9970</span>
+        </div>
+        <div class="row">
+          <label for="speed">Steps / frame</label>
+          <input id="speed" type="range" min="1" max="40" value="8">
+          <span class="val" id="speedv">8</span>
+        </div>
+        <div class="row">
+          <label for="seed">Seed</label>
+          <input id="seed" type="number" value="20260908" step="1">
+        </div>
+        <div class="row">
+          <button id="play" class="primary">Play</button>
+          <button id="step">Step</button>
+          <button id="reset">Reset</button>
+        </div>
+
+        <table>
+          <tr><td>evaluation</td><td id="k">0 / 2000</td></tr>
+          <tr><td>temperature</td><td id="T">—</td></tr>
+          <tr><td>current f</td><td id="cur">—</td></tr>
+          <tr><td>best f</td><td id="best">—</td></tr>
+          <tr><td>accepted worsenings</td><td id="acc">—</td></tr>
+          <tr><td>escapes from a local optimum</td><td id="esc" class="big">0</td></tr>
+        </table>
+      </div>
+
+      <div class="panel" style="margin-top:14px">
+        <div style="font-size:13px;color:var(--muted);margin-bottom:6px">
+          Acceptance probability P = e<sup>&Delta;/T</sup>
+        </div>
+        <canvas id="prob" width="300" height="150"></canvas>
+        <div class="note">
+          Curve for the <em>current</em> temperature. As T falls it collapses toward a
+          step function: at T&rarr;0 the search accepts improvements only and
+          simulated annealing degenerates into hill climbing.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-top:16px">
+    <div class="note" style="margin:0">
+      <b style="color:var(--ink)">On the guarantee.</b>
+      Simulated annealing converges in probability to the global optimum <em>only</em>
+      under a logarithmic schedule, T(k) = c / log(k). Set &alpha; here as slowly as the
+      slider allows and watch how little the temperature moves in 2000 steps — the
+      logarithmic schedule is slower still, by an amount that exceeds exhaustive
+      enumeration on any realistic instance. The guarantee is asymptotic and
+      operationally vacuous at a fixed budget. The geometric schedule used here
+      abandons it deliberately, and a submission that cites the convergence proof to
+      justify a geometric schedule is citing a theorem whose precondition its own
+      code violates.
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+function rng(seed){ let a=seed>>>0; return function(){ a|=0; a=(a+0x6D2B79F5)|0;
+  let t=Math.imul(a^(a>>>15),1|a); t=(t+Math.imul(t^(t>>>7),61|t))^t;
+  return ((t^(t>>>14))>>>0)/4294967296; }; }
+
+// A 1-D landscape with a wide, attractive local optimum on the left and the
+// global optimum on the right, separated by a real barrier. Hill climbing
+// started on the left cannot cross it; annealing can, while it is warm.
+function f(x){
+  return 0.62*Math.exp(-((x-0.24)**2)/0.012)      // wide local trap
+       + 1.00*Math.exp(-((x-0.78)**2)/0.006)      // global optimum
+       + 0.22*Math.exp(-((x-0.50)**2)/0.004)      // small ripple in the barrier
+       + 0.05*Math.sin(28*x);                     // fine corrugation
+}
+
+const BUDGET = 2000, STEP = 0.045, LOCAL_X = 0.24, BARRIER_X = 0.52;
+
+let st = null;
+function reset(){
+  const r = rng((+document.getElementById("seed").value|0)>>>0);
+  st = { r, k:0, x:LOCAL_X, cur:f(LOCAL_X), bx:LOCAL_X, best:f(LOCAL_X),
+         T:t0(), events:[], hist:[], worseTried:0, worseAcc:0, escapes:0, crossed:false };
+  render();
+}
+const t0    = () => +document.getElementById("t0").value/100;
+const alpha = () => +document.getElementById("alpha").value/10000;
+
+function stepOnce(){
+  if (!st || st.k >= BUDGET) return;
+  const nx = Math.min(1, Math.max(0, st.x + (st.r()*2-1)*STEP));
+  const v = f(nx), d = v - st.cur;
+  let kind;
+  if (d >= 0) { kind = "up"; }
+  else {
+    st.worseTried++;
+    kind = st.r() < Math.exp(d/Math.max(st.T,1e-12)) ? "worse" : "rej";
+    if (kind === "worse") st.worseAcc++;
+  }
+  if (kind !== "rej") {
+    // Crossing the barrier is only possible by accepting worsenings; count it
+    // once, because it is the single thing this animation exists to show.
+    if (!st.crossed && st.x < BARRIER_X && nx >= BARRIER_X) { st.escapes++; st.crossed = true; }
+    st.x = nx; st.cur = v;
+    if (v > st.best) { st.best = v; st.bx = nx; }
+  }
+  st.events.push({x:nx, y:v, kind});
+  if (st.events.length > 260) st.events.shift();
+  st.hist.push({T:st.T, rate: st.worseTried ? st.worseAcc/st.worseTried : 0});
+  st.T *= alpha();
+  st.k++;
+}
+
+const $ = id => document.getElementById(id);
+const land = $("land"), lc = land.getContext("2d");
+const trace = $("trace"), tc = trace.getContext("2d");
+const prob = $("prob"), pc = prob.getContext("2d");
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+function render(){
+  if (!st) return;
+  const W = land.width, H = land.height, pad = 16;
+  lc.clearRect(0,0,W,H);
+
+  let lo=Infinity, hi=-Infinity;
+  const ys=[]; for(let i=0;i<=W;i++){ const v=f(i/W); ys.push(v); if(v<lo)lo=v; if(v>hi)hi=v; }
+  const Y = v => H-pad-(H-2*pad)*((v-lo)/(hi-lo));
+
+  lc.strokeStyle="#3a4152"; lc.lineWidth=2; lc.beginPath();
+  ys.forEach((v,i)=> i?lc.lineTo(i,Y(v)):lc.moveTo(i,Y(v))); lc.stroke();
+
+  lc.setLineDash([4,4]); lc.strokeStyle="#4a5266"; lc.lineWidth=1;
+  lc.beginPath(); lc.moveTo(BARRIER_X*W,pad); lc.lineTo(BARRIER_X*W,H-pad); lc.stroke();
+  lc.setLineDash([]);
+  lc.fillStyle="#5b6577"; lc.font="11px ui-sans-serif";
+  lc.fillText("local trap", 0.16*W, pad+4); lc.fillText("global optimum", 0.70*W, pad+4);
+
+  const colour = {up:css("--ok"), worse:css("--warn"), rej:"#5b6577"};
+  st.events.forEach((e,i)=>{
+    lc.globalAlpha = 0.15 + 0.85*(i/st.events.length);
+    lc.fillStyle = colour[e.kind];
+    lc.beginPath(); lc.arc(e.x*W, Y(e.y), e.kind==="worse"?4:2.6, 0, 6.2832); lc.fill();
+  });
+  lc.globalAlpha=1;
+
+  lc.fillStyle=css("--cold");
+  lc.beginPath(); lc.arc(st.bx*W, Y(st.best), 6, 0, 6.2832); lc.fill();
+  lc.strokeStyle="#fff"; lc.lineWidth=2;
+  lc.beginPath(); lc.arc(st.x*W, Y(st.cur), 5, 0, 6.2832); lc.stroke();
+
+  // temperature + acceptance-rate strip
+  const TW=trace.width, TH=trace.height, tp=18;
+  tc.clearRect(0,0,TW,TH);
+  tc.strokeStyle="#2a2f3a"; tc.beginPath();
+  tc.moveTo(tp,4); tc.lineTo(tp,TH-tp); tc.lineTo(TW-4,TH-tp); tc.stroke();
+  if (st.hist.length>1){
+    const T0=t0();
+    const X=i=>tp+(TW-tp-4)*(i/(BUDGET-1));
+    const plot=(get,color,scale)=>{ tc.strokeStyle=color; tc.lineWidth=2; tc.beginPath();
+      st.hist.forEach((h,i)=>{ const y=(TH-tp)-(TH-tp-6)*Math.min(1,get(h)/scale);
+        i?tc.lineTo(X(i),y):tc.moveTo(X(i),y); }); tc.stroke(); };
+    plot(h=>h.T, css("--hot"), T0);
+    plot(h=>h.rate, css("--warn"), 1);
+    tc.fillStyle="#9aa3b2"; tc.font="10px ui-sans-serif";
+    tc.fillText("T", 4, 12); tc.fillText("accept rate", TW-72, TH-4);
+  }
+
+  // acceptance probability curve at the current temperature
+  const PW=prob.width, PH=prob.height, pp=22;
+  pc.clearRect(0,0,PW,PH);
+  pc.strokeStyle="#2a2f3a"; pc.beginPath();
+  pc.moveTo(pp,4); pc.lineTo(pp,PH-pp); pc.lineTo(PW-4,PH-pp); pc.stroke();
+  pc.strokeStyle=css("--hot"); pc.lineWidth=2; pc.beginPath();
+  for(let i=0;i<=100;i++){
+    const dd=-0.6*(i/100);
+    const p=Math.exp(dd/Math.max(st.T,1e-12));
+    const X=pp+(PW-pp-4)*(i/100), Yp=(PH-pp)-(PH-pp-6)*p;
+    i?pc.lineTo(X,Yp):pc.moveTo(X,Yp);
+  }
+  pc.stroke();
+  pc.fillStyle="#9aa3b2"; pc.font="10px ui-sans-serif";
+  pc.fillText("Δ = 0", pp, PH-8); pc.fillText("Δ = −0.6", PW-56, PH-8); pc.fillText("P=1", 2, 12);
+
+  $("k").textContent = `${st.k} / ${BUDGET}`;
+  $("T").textContent = st.T.toExponential(2);
+  $("cur").textContent = st.cur.toFixed(4);
+  $("best").textContent = st.best.toFixed(4);
+  $("acc").textContent = st.worseTried ? `${st.worseAcc}/${st.worseTried} (${(100*st.worseAcc/st.worseTried).toFixed(0)}%)` : "—";
+  $("esc").textContent = st.escapes;
+  $("esc").style.color = st.escapes ? css("--ok") : css("--muted");
+}
+
+let playing=false, raf=null;
+function loop(){
+  if(!playing) return;
+  const n=+$("speed").value;
+  for(let i=0;i<n;i++) stepOnce();
+  render();
+  if(st.k>=BUDGET){ playing=false; $("play").textContent="Play"; return; }
+  raf=requestAnimationFrame(loop);
+}
+
+$("t0").addEventListener("input", ()=>{ $("t0v").textContent=t0().toFixed(2); reset(); });
+$("alpha").addEventListener("input", ()=>{ $("alphav").textContent=alpha().toFixed(4); reset(); });
+$("speed").addEventListener("input", ()=>{ $("speedv").textContent=$("speed").value; });
+$("seed").addEventListener("change", reset);
+$("step").addEventListener("click", ()=>{ stepOnce(); render(); });
+$("reset").addEventListener("click", ()=>{ playing=false; $("play").textContent="Play";
+  if(raf) cancelAnimationFrame(raf); reset(); });
+$("play").addEventListener("click", ()=>{
+  playing=!playing; $("play").textContent = playing?"Pause":"Play";
+  if(playing) loop();
+});
+
+reset();
+</script>
+</body>
+</html>

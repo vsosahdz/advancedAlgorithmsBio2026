@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PSO — velocity decomposition</title>
+<style>
+  :root{--bg:#0f1115;--panel:#171a21;--line:#2a2f3a;--ink:#e8eaf0;--muted:#9aa3b2;
+        --inertia:#8b96a8;--cog:#4ea1ff;--soc:#ff9f43;--res:#3ddc84;--gbest:#ff5c8a;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font:15px/1.5 ui-sans-serif,-apple-system,"Segoe UI",Roboto,sans-serif}
+  .wrap{max-width:1180px;margin:0 auto;padding:20px}
+  h1{font-size:20px;margin:0 0 2px;font-weight:650}
+  .sub{color:var(--muted);font-size:13px;margin-bottom:16px}
+  .grid{display:grid;grid-template-columns:1fr 330px;gap:16px;align-items:start}
+  @media(max-width:900px){.grid{grid-template-columns:1fr}}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px}
+  canvas{width:100%;height:auto;display:block;border-radius:6px;background:#0a0c10;cursor:crosshair}
+  .row{display:flex;align-items:center;gap:10px;margin:9px 0}
+  label{font-size:13px;color:var(--muted);min-width:92px}
+  input[type=range]{flex:1;accent-color:var(--cog)}
+  input[type=number]{width:100px;background:#0c0e12;color:var(--ink);border:1px solid var(--line);
+    border-radius:6px;padding:5px 7px;font:inherit;font-size:13px}
+  select{background:#0c0e12;color:var(--ink);border:1px solid var(--line);border-radius:6px;
+    padding:5px 7px;font:inherit;font-size:13px;flex:1}
+  .val{font-variant-numeric:tabular-nums;min-width:52px;text-align:right;font-size:13px}
+  button{background:#222836;color:var(--ink);border:1px solid var(--line);border-radius:7px;
+    padding:7px 13px;font:inherit;font-size:13px;cursor:pointer}
+  button:hover{background:#2b3244}
+  button.primary{background:var(--cog);color:#06121f;border-color:var(--cog);font-weight:600}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:8px}
+  .chip{display:inline-flex;align-items:center;gap:5px}
+  .swatch{width:16px;height:3px;border-radius:2px}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px}
+  td{padding:4px 6px;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}
+  td:last-child{text-align:right} td:first-child{color:var(--muted)}
+  .note{color:var(--muted);font-size:12px;margin-top:10px;line-height:1.5}
+  .eq{font-size:13px;background:#10141b;border:1px solid var(--line);border-radius:8px;
+      padding:10px 12px;margin-top:10px;line-height:1.9}
+  .warn{color:#ffc44d}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Particle swarm — the update rule is three vectors</h1>
+  <div class="sub">
+    Click any particle to follow it. Its inertial, cognitive and social pulls are
+    drawn separately, together with the resultant that actually moves it.
+  </div>
+
+  <div class="grid">
+    <div class="panel">
+      <canvas id="field" width="760" height="440"></canvas>
+      <div class="legend">
+        <span class="chip"><span class="swatch" style="background:var(--inertia)"></span> w·v — inertia, where it was already going</span>
+        <span class="chip"><span class="swatch" style="background:var(--cog)"></span> c₁r₁(p−x) — cognitive, its own best</span>
+        <span class="chip"><span class="swatch" style="background:var(--soc)"></span> c₂r₂(g−x) — social, the swarm's best</span>
+        <span class="chip"><span class="swatch" style="background:var(--res)"></span> resultant — the three added tip to tail</span>
+        <span class="chip"><span class="swatch" style="background:var(--gbest);height:9px;width:9px;border-radius:50%"></span> gbest</span>
+      </div>
+      <div class="eq">
+        v<sub>i</sub> ← <span style="color:var(--inertia)">w·v<sub>i</sub></span>
+        + <span style="color:var(--cog)">c₁r₁(p<sub>i</sub> − x<sub>i</sub>)</span>
+        + <span style="color:var(--soc)">c₂r₂(g − x<sub>i</sub>)</span>
+        &nbsp;&nbsp;&nbsp; x<sub>i</sub> ← x<sub>i</sub> + v<sub>i</sub>
+      </div>
+    </div>
+
+    <div>
+      <div class="panel">
+        <div class="row"><label for="w">w inertia</label>
+          <input id="w" type="range" min="0" max="140" value="73"><span class="val" id="wv">0.73</span></div>
+        <div class="row"><label for="c1">c₁ cognitive</label>
+          <input id="c1" type="range" min="0" max="400" value="150"><span class="val" id="c1v">1.50</span></div>
+        <div class="row"><label for="c2">c₂ social</label>
+          <input id="c2" type="range" min="0" max="400" value="150"><span class="val" id="c2v">1.50</span></div>
+        <div class="row"><label for="topo">topology</label>
+          <select id="topo"><option value="gbest">gbest — fully connected</option>
+                            <option value="ring">ring — two neighbours</option></select></div>
+        <div class="row"><label for="seed">seed</label>
+          <input id="seed" type="number" value="20260910" step="1"></div>
+        <div class="row">
+          <button id="play" class="primary">Play</button>
+          <button id="step">Step</button>
+          <button id="reset">Reset</button>
+        </div>
+        <table>
+          <tr><td>iteration</td><td id="it">0</td></tr>
+          <tr><td>best found</td><td id="best">—</td></tr>
+          <tr><td>swarm diversity</td><td id="div">—</td></tr>
+          <tr><td>|v| mean</td><td id="vel">—</td></tr>
+          <tr><td>stability</td><td id="stab">—</td></tr>
+          <tr><td>velocity clamped</td><td id="clamp">—</td></tr>
+        </table>
+      </div>
+
+      <div class="panel" style="margin-top:14px">
+        <div style="font-size:13px;color:var(--muted);margin-bottom:6px">Diversity over time</div>
+        <canvas id="chart" width="300" height="130"></canvas>
+        <div class="note">
+          Diversity collapsing to zero while the best stops improving <em>is</em>
+          premature convergence. A flat convergence curve alone cannot tell you
+          that — it looks the same whether the swarm found the optimum or merely
+          agreed with itself.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-top:16px">
+    <div class="note" style="margin:0">
+      <b style="color:var(--ink)">On "PSO converges".</b>
+      The stability readout says whether (w, c₁, c₂) sits inside the region where
+      particle trajectories converge rather than diverge — roughly
+      w &lt; 1 and 0 &lt; c₁+c₂ &lt; 2(1+w). That is a statement about the
+      <em>dynamics</em>: it tells you the swarm will settle. It says nothing about
+      <em>what it settles on</em>. Set c₂ high and c₁ to zero: every particle is
+      pulled straight to the current best, the swarm collapses, diversity hits zero,
+      and the run is perfectly stable and perfectly stuck. Stability and optimality
+      are different properties, and conflating them is the most common false claim
+      made about this algorithm.
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+function rng(seed){let a=seed>>>0;return function(){a|=0;a=(a+0x6D2B79F5)|0;
+  let t=Math.imul(a^(a>>>15),1|a);t=(t+Math.imul(t^(t>>>7),61|t))^t;
+  return ((t^(t>>>14))>>>0)/4294967296;};}
+
+// Multimodal so the social pull can be actively harmful: the swarm can agree
+// on the wrong basin, which is what makes topology matter.
+function f(x,y){
+  return 1.00*Math.exp(-(((x-0.72)**2+(y-0.30)**2))/0.010)
+       + 0.82*Math.exp(-(((x-0.26)**2+(y-0.66)**2))/0.020)
+       + 0.55*Math.exp(-(((x-0.60)**2+(y-0.78)**2))/0.014)
+       + 0.10*Math.sin(11*x)*Math.sin(11*y);
+}
+
+// VMAX calibrated: at 0.10 the clamp fired on 22% of steps and became the
+// dominant dynamic rather than a guard, which is not what PSO looks like. At
+// 0.30 it fires on 3% with identical solution quality.
+const N = 18, VMAX = 0.30;
+let st = null, selected = 0;
+
+const $ = id => document.getElementById(id);
+const W = () => +$("w").value/100, C1 = () => +$("c1").value/100, C2 = () => +$("c2").value/100;
+
+function reset(){
+  const r = rng((+$("seed").value|0)>>>0);
+  const P = [], V = [], PB = [], PBF = [];
+  for(let i=0;i<N;i++){
+    const x=r(), y=r();
+    P.push({x,y}); V.push({x:(r()*2-1)*VMAX, y:(r()*2-1)*VMAX});
+    PB.push({x,y}); PBF.push(f(x,y));
+  }
+  st = {r,P,V,PB,PBF,it:0,hist:[],last:null};
+  render();
+}
+
+function nbBest(i){
+  if($("topo").value==="ring"){
+    const idx=[(i-1+N)%N,i,(i+1)%N];
+    let b=idx[0]; for(const j of idx) if(st.PBF[j]>st.PBF[b]) b=j;
+    return st.PB[b];
+  }
+  let b=0; for(let j=1;j<N;j++) if(st.PBF[j]>st.PBF[b]) b=j;
+  return st.PB[b];
+}
+function gbestIdx(){ let b=0; for(let j=1;j<N;j++) if(st.PBF[j]>st.PBF[b]) b=j; return b; }
+
+function stepOnce(){
+  if(!st) return;
+  const w=W(), c1=C1(), c2=C2();
+  const parts=[];
+  for(let i=0;i<N;i++){
+    const g = nbBest(i), p = st.PB[i], x = st.P[i], v = st.V[i];
+    const r1x=st.r(), r1y=st.r(), r2x=st.r(), r2y=st.r();
+    const inertia={x:w*v.x, y:w*v.y};
+    const cog={x:c1*r1x*(p.x-x.x), y:c1*r1y*(p.y-x.y)};
+    const soc={x:c2*r2x*(g.x-x.x), y:c2*r2y*(g.y-x.y)};
+    const nv={x:inertia.x+cog.x+soc.x, y:inertia.y+cog.y+soc.y};
+    const sp=Math.hypot(nv.x,nv.y);
+    // When the clamp fires, the three components are scaled by the SAME factor
+    // for drawing. Otherwise the arrows would not sum to the resultant and the
+    // parallelogram -- the entire point of this figure -- would be a lie.
+    const k = sp>VMAX ? VMAX/sp : 1;
+    if(k<1){ nv.x*=k; nv.y*=k; }
+    parts.push({inertia,cog,soc,nv,k,from:{x:x.x,y:x.y}});
+    st.V[i]=nv;
+    st.P[i]={x:Math.min(1,Math.max(0,x.x+nv.x)), y:Math.min(1,Math.max(0,x.y+nv.y))};
+    const val=f(st.P[i].x,st.P[i].y);
+    if(val>st.PBF[i]){ st.PBF[i]=val; st.PB[i]={...st.P[i]}; }
+  }
+  st.last=parts; st.it++;
+  const cx=st.P.reduce((s,p)=>s+p.x,0)/N, cy=st.P.reduce((s,p)=>s+p.y,0)/N;
+  const div=st.P.reduce((s,p)=>s+Math.hypot(p.x-cx,p.y-cy),0)/N;
+  st.hist.push({div, best:Math.max(...st.PBF)});
+}
+
+const field=$("field"), fc=field.getContext("2d");
+const chart=$("chart"), cc=chart.getContext("2d");
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+function arrow(ctx,x0,y0,dx,dy,color,widthPx){
+  const len=Math.hypot(dx,dy); if(len<0.4) return;
+  ctx.strokeStyle=color; ctx.fillStyle=color; ctx.lineWidth=widthPx;
+  ctx.beginPath(); ctx.moveTo(x0,y0); ctx.lineTo(x0+dx,y0+dy); ctx.stroke();
+  const a=Math.atan2(dy,dx), h=Math.min(9,len*0.45);
+  ctx.beginPath();
+  ctx.moveTo(x0+dx,y0+dy);
+  ctx.lineTo(x0+dx-h*Math.cos(a-0.42), y0+dy-h*Math.sin(a-0.42));
+  ctx.lineTo(x0+dx-h*Math.cos(a+0.42), y0+dy-h*Math.sin(a+0.42));
+  ctx.closePath(); ctx.fill();
+}
+
+function render(){
+  if(!st) return;
+  const Wd=field.width, H=field.height;
+  const img=fc.createImageData(Wd,H); const vals=new Float64Array(Wd*H);
+  let lo=Infinity,hi=-Infinity;
+  for(let j=0;j<H;j++) for(let i=0;i<Wd;i++){
+    const v=f(i/Wd,j/H); vals[j*Wd+i]=v; if(v<lo)lo=v; if(v>hi)hi=v; }
+  for(let p=0;p<vals.length;p++){
+    const t=(vals[p]-lo)/(hi-lo||1);
+    img.data[p*4]=Math.round(255*Math.min(1,Math.max(0,1.5*t-0.30)));
+    img.data[p*4+1]=Math.round(255*Math.min(1,Math.max(0,1.4*t-0.18)));
+    img.data[p*4+2]=Math.round(255*Math.min(1,Math.max(0,0.50+0.50*t)));
+    img.data[p*4+3]=255;
+  }
+  fc.putImageData(img,0,0);
+
+  const gi=gbestIdx();
+  fc.fillStyle=css("--gbest");
+  fc.beginPath(); fc.arc(st.PB[gi].x*Wd, st.PB[gi].y*H, 7, 0, 6.2832); fc.fill();
+
+  for(let i=0;i<N;i++){
+    const p=st.P[i];
+    fc.fillStyle = i===selected ? "#ffffff" : "rgba(232,234,240,.62)";
+    fc.beginPath(); fc.arc(p.x*Wd, p.y*H, i===selected?5.5:3.4, 0, 6.2832); fc.fill();
+  }
+
+  if(st.last && st.last[selected]){
+    const L=st.last[selected], SC=Wd; // vectors are in the same unit square
+    const ox=L.from.x*Wd, oy=L.from.y*H;
+    // pbest of the followed particle, so the cognitive pull has a visible target
+    fc.strokeStyle=css("--cog"); fc.setLineDash([2,3]); fc.lineWidth=1;
+    fc.beginPath(); fc.arc(st.PB[selected].x*Wd, st.PB[selected].y*H, 5, 0, 6.2832); fc.stroke();
+    fc.setLineDash([]);
+    const k=L.k;
+    arrow(fc,ox,oy,L.inertia.x*k*SC,L.inertia.y*k*H,css("--inertia"),2);
+    arrow(fc,ox,oy,L.cog.x*k*SC,L.cog.y*k*H,css("--cog"),2);
+    arrow(fc,ox,oy,L.soc.x*k*SC,L.soc.y*k*H,css("--soc"),2);
+    arrow(fc,ox,oy,L.nv.x*SC,L.nv.y*H,css("--res"),3.2);
+    // Tip-to-tail from inertia, so the three genuinely add up on screen.
+    fc.setLineDash([2,3]); fc.lineWidth=1; fc.strokeStyle="rgba(232,234,240,.35)";
+    fc.beginPath();
+    fc.moveTo(ox+L.inertia.x*k*SC, oy+L.inertia.y*k*H);
+    fc.lineTo(ox+(L.inertia.x+L.cog.x)*k*SC, oy+(L.inertia.y+L.cog.y)*k*H);
+    fc.lineTo(ox+L.nv.x*SC, oy+L.nv.y*H);
+    fc.stroke(); fc.setLineDash([]);
+  }
+
+  // readouts
+  const w=W(), c1=C1(), c2=C2(), phi=c1+c2;
+  const stable = w<1 && phi>0 && phi<2*(1+w);
+  $("it").textContent=st.it;
+  $("best").textContent=Math.max(...st.PBF).toFixed(4);
+  const cx=st.P.reduce((s,p)=>s+p.x,0)/N, cy=st.P.reduce((s,p)=>s+p.y,0)/N;
+  const div=st.P.reduce((s,p)=>s+Math.hypot(p.x-cx,p.y-cy),0)/N;
+  $("div").textContent=div.toFixed(4);
+  $("vel").textContent=(st.V.reduce((s,v)=>s+Math.hypot(v.x,v.y),0)/N).toFixed(4);
+  const kk = st.last && st.last[selected] ? st.last[selected].k : 1;
+  $("clamp").innerHTML = kk<1
+    ? `<span class="warn">yes, x${kk.toFixed(2)}</span>`
+    : "no";
+  $("stab").innerHTML = stable
+    ? `<span style="color:var(--res)">inside</span>`
+    : `<span class="warn">OUTSIDE — φ=${phi.toFixed(2)}, limit ${(2*(1+w)).toFixed(2)}</span>`;
+
+  // diversity chart
+  const CW=chart.width, CH=chart.height, pad=22;
+  cc.clearRect(0,0,CW,CH);
+  cc.strokeStyle="#2a2f3a"; cc.beginPath();
+  cc.moveTo(pad,4); cc.lineTo(pad,CH-pad); cc.lineTo(CW-4,CH-pad); cc.stroke();
+  if(st.hist.length>1){
+    const maxd=Math.max(...st.hist.map(h=>h.div),1e-6);
+    cc.strokeStyle=css("--cog"); cc.lineWidth=2; cc.beginPath();
+    st.hist.forEach((h,i)=>{
+      const x=pad+(CW-pad-4)*(i/Math.max(1,st.hist.length-1));
+      const y=(CH-pad)-(CH-pad-6)*(h.div/maxd);
+      i?cc.lineTo(x,y):cc.moveTo(x,y);
+    });
+    cc.stroke();
+  }
+  cc.fillStyle="#9aa3b2"; cc.font="10px ui-sans-serif"; cc.fillText("iterations →",CW-72,CH-6);
+}
+
+field.addEventListener("click",e=>{
+  const r=field.getBoundingClientRect();
+  const mx=(e.clientX-r.left)/r.width, my=(e.clientY-r.top)/r.height;
+  let b=0,bd=Infinity;
+  for(let i=0;i<N;i++){ const d=Math.hypot(st.P[i].x-mx, st.P[i].y-my); if(d<bd){bd=d;b=i;} }
+  selected=b; render();
+});
+
+let playing=false, raf=null;
+function loop(){ if(!playing) return; stepOnce(); render(); raf=requestAnimationFrame(loop); }
+
+["w","c1","c2"].forEach(id=>$(id).addEventListener("input",()=>{
+  $(id+"v").textContent=(+$(id).value/100).toFixed(2); render(); }));
+$("topo").addEventListener("change",reset);
+$("seed").addEventListener("change",reset);
+$("step").addEventListener("click",()=>{stepOnce();render();});
+$("reset").addEventListener("click",()=>{playing=false;$("play").textContent="Play";
+  if(raf)cancelAnimationFrame(raf); reset();});
+$("play").addEventListener("click",()=>{playing=!playing;$("play").textContent=playing?"Pause":"Play";
+  if(playing)loop();});
+
+reset();
+</script>
+</body>
+</html>
