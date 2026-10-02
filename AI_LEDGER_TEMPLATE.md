@@ -120,5 +120,5 @@ The single most likely place for an assistant to be confidently wrong in this
 assignment is the **statistical comparison**. Asked to compare metaheuristics,
 models very often reach for a t-test, or report best-of-N without dispersion.
 Both are rejection-worthy errors in this literature. If you accepted such a
-suggestion without noticing, it will come up in your video defence — and it
+suggestion without noticing, it will come up in your video defense — and it
 would have made an excellent Section 3.

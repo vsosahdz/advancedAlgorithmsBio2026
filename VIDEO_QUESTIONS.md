@@ -1,4 +1,4 @@
-# Video defence — question bank
+# Video defense — question bank
 
 At recording time you will draw **two** questions from this bank. Draw them with
 
@@ -71,8 +71,9 @@ Five minutes total, including the two questions. Have your figures on screen.
 21. Your effect size: is your significant difference also a difference that
     matters? Argue either way from your numbers.
 22. What does your comparison *not* license you to claim?
-23. **Pairs:** did your ranking hold across both instances? If it inverted, what
-    does that mean; if it held, why is that not proof of general superiority?
+23. Your ranking was established on one instance. Name the experiment that
+    would test whether it transfers, and say what result would change your
+    conclusion.
 
 ## F · Your process
 
@@ -87,7 +88,7 @@ Five minutes total, including the two questions. Have your figures on screen.
 
 The video produces an **individual multiplier** on the notebook score, capped
 at 1.0 — it can confirm or reduce your grade, never raise it above what the
-notebook earned. The bands are in §13 of the assignment specification, "Rubric".
+notebook earned. The bands are in §11 of the assignment specification, "Rubric".
 
 In a pair, **both members record separately**, each drawing their own questions,
 and each receives their own multiplier. No video means a zero multiplier
@@ -96,4 +97,4 @@ regardless of how good the submission is.
 **The video is submitted with M3**, not with each milestone: paste the link
 (Drive, OneDrive or unlisted YouTube) into the last cell of your M3 notebook,
 and confirm your instructor can open it before you submit. Five minutes
-maximum — see §11 of the specification.
+maximum — see §9 of the specification.

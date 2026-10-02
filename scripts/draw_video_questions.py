@@ -1,4 +1,4 @@
-"""Draw the two video-defence questions for a student.
+"""Draw the two video-defense questions for a student.
 
 The draw is seeded from the student ID **and the recording date**, so it cannot
 be known before the day, yet the instructor can reproduce it exactly from the ID
