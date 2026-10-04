@@ -5,6 +5,10 @@ Prof. Víctor Adrián Sosa Hernández
 
 Lecture material for the sessions covered so far.
 
+**Start at [`index.html`](index.html)** — open it in a browser and it links
+everything below. It is regenerated on every release, so a `git pull` brings
+both the new session and the updated page.
+
 | | |
 |---|---|
 | `slides/lesson-01.html` | landscapes · no free lunch · Monte Carlo · simulated annealing |
