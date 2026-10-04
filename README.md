@@ -73,8 +73,7 @@ A grey page with a broken-file icon means the browser could not reach
 
    then open <http://localhost:8000/lesson-01.html>.
 
-## Not here yet
+## Updates
 
-The capstone assignment — its specification, the `tc6035` library and the
-starter notebooks — is released after Session 2 and arrives through Canvas.
-This repository will carry the later sessions' slides as they are given.
+Later sessions appear here as they are given. Run `git pull` in this folder to
+pick them up; the landing page updates with them.
