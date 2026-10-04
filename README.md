@@ -36,9 +36,9 @@ the deck needs is already inside the file.
 
 | | |
 |---|---|
+| `M` | the menu — and **Index**, to come back to this page |
 | `→` `←` or `space` | next and previous slide |
 | `Esc` or `O` | overview of every slide |
-| `M` | menu, to jump to a section |
 | `F` | full screen |
 | `?` | the full list of keys |
 
