@@ -1,0 +1,379 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>No Free Lunch — rank inversion</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --line: #2a2f3a;
+    --ink: #e8eaf0; --muted: #9aa3b2;
+    --a: #4ea1ff; --b: #ff9f43; --ok: #3ddc84;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.5 ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 20px; }
+  h1 { font-size: 20px; margin: 0 0 2px; font-weight: 650; }
+  .sub { color: var(--muted); font-size: 13px; margin-bottom: 16px; }
+  .grid { display: grid; grid-template-columns: 1fr 340px; gap: 16px; align-items: start; }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
+  canvas { width: 100%; height: auto; display: block; border-radius: 6px; background: #000; }
+  .row { display: flex; align-items: center; gap: 10px; margin: 10px 0; }
+  label { font-size: 13px; color: var(--muted); min-width: 96px; }
+  input[type=range] { flex: 1; accent-color: var(--a); }
+  input[type=number] { width: 96px; background: #0c0e12; color: var(--ink);
+    border: 1px solid var(--line); border-radius: 6px; padding: 5px 7px; font: inherit; font-size: 13px; }
+  .val { font-variant-numeric: tabular-nums; min-width: 46px; text-align: right; font-size: 13px; }
+  button { background: #222836; color: var(--ink); border: 1px solid var(--line);
+    border-radius: 7px; padding: 7px 13px; font: inherit; font-size: 13px; cursor: pointer; }
+  button:hover { background: #2b3244; }
+  button.primary { background: var(--a); color: #07121f; border-color: var(--a); font-weight: 600; }
+  .legend { display: flex; gap: 16px; font-size: 13px; margin-top: 8px; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 4px; }
+  th, td { text-align: right; padding: 5px 6px; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--muted); font-weight: 500; }
+  .winner { color: var(--ok); font-weight: 650; }
+  .verdict { margin-top: 12px; padding: 11px 12px; border-radius: 8px;
+    background: #10141b; border: 1px solid var(--line); font-size: 13px; line-height: 1.45; }
+  .verdict b { color: var(--ok); }
+  .note { color: var(--muted); font-size: 12px; margin-top: 10px; line-height: 1.5; }
+  .bar { height: 9px; background: #0c0e12; border-radius: 5px; overflow: hidden; margin-top: 3px; }
+  .bar span { display: block; height: 100%; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>No Free Lunch — the ranking inverts</h1>
+  <div class="sub">
+    Two <em>reasonable</em> algorithms. Same budget, same seeds, same starting points.
+    Only the landscape changes.
+  </div>
+
+  <div class="grid">
+    <div class="panel">
+      <canvas id="field" width="760" height="420"></canvas>
+      <div class="legend">
+        <span class="chip"><span class="dot" style="background:var(--a)"></span> A · fine steps (&sigma; = <span id="sigA">0.02</span>)</span>
+        <span class="chip"><span class="dot" style="background:var(--b)"></span> B · coarse steps (&sigma; = <span id="sigB">0.30</span>)</span>
+      </div>
+      <div class="note">
+        Both are hill climbers differing only in step size. Neither is a straw man:
+        fine steps converge precisely, coarse steps escape local optima.
+      </div>
+    </div>
+
+    <div>
+      <div class="panel">
+        <div class="row">
+          <label for="rug">Ruggedness</label>
+          <input id="rug" type="range" min="0" max="100" value="0">
+          <span class="val" id="rugv">0.00</span>
+        </div>
+        <div class="row">
+          <label for="seed">Seed</label>
+          <input id="seed" type="number" value="20260908" step="1">
+          <button id="reset">Reset</button>
+        </div>
+        <div class="row">
+          <button id="run" class="primary">Run 30 restarts</button>
+          <button id="sweep">Sweep ruggedness</button>
+        </div>
+
+        <table>
+          <thead><tr><th>Algorithm</th><th>median</th><th>IQR</th><th>wins</th></tr></thead>
+          <tbody>
+            <tr><td><span class="dot" style="background:var(--a);display:inline-block"></span> A fine</td>
+                <td id="mA">—</td><td id="qA">—</td><td id="wA">—</td></tr>
+            <tr><td><span class="dot" style="background:var(--b);display:inline-block"></span> B coarse</td>
+                <td id="mB">—</td><td id="qB">—</td><td id="wB">—</td></tr>
+          </tbody>
+        </table>
+        <div class="bar"><span id="barA" style="background:var(--a);width:0"></span></div>
+        <div class="bar"><span id="barB" style="background:var(--b);width:0"></span></div>
+
+        <div class="verdict" id="verdict">Press <b>Run</b> at ruggedness 0.</div>
+      </div>
+
+      <div class="panel" style="margin-top:14px">
+        <div style="font-size:13px;color:var(--muted);margin-bottom:6px">Ruggedness sweep — median best</div>
+        <canvas id="chart" width="320" height="180"></canvas>
+        <div class="note">
+          The crossing point is the whole argument. Neither algorithm dominates;
+          which one wins is a property of the <em>landscape</em>, not of the algorithm.
+          Scores are a fraction of each landscape's own optimum, so the curves
+          compare search quality rather than landscape scale.
+          <br><br>
+          The two sides are <em>asymmetric on purpose</em>: on a smooth surface both
+          algorithms reach the optimum, so A can only win by a hair — visible in the
+          paired win count, not in the medians. On a rugged surface A genuinely fails
+          and B's margin is large. What inverts is the <b>order</b>, which is the claim.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-top:16px">
+    <div class="note" style="margin:0">
+      <b style="color:var(--ink)">What this does and does not show.</b>
+      It shows that a ranking established on one problem class need not transfer to another
+      — which is why an empirical comparison must state the class it holds for.
+      It is <em>not</em> a proof of the theorem: NFL is a statement about the average over
+      <em>all</em> objective functions, a set closed under permutation of its codomain.
+      Real problem classes are a vanishingly small, structured subset that is not closed
+      under permutation, so the theorem's averaging argument does not apply to them.
+      NFL forbids a universally superior algorithm; it does not forbid one algorithm being
+      reliably better on a structured class — nor does it excuse you from demonstrating which.
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---- deterministic RNG (mulberry32): same seed, same run, every time -------
+function rng(seed) {
+  let a = seed >>> 0;
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function gauss(r) {
+  let u = 0, v = 0;
+  while (u === 0) u = r();
+  while (v === 0) v = r();
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+}
+
+// ---- landscape family ------------------------------------------------------
+// A smooth basin plus a sinusoidal corrugation whose amplitude is the only
+// thing the slider changes. At amplitude 0 the surface is unimodal; as it rises
+// the surface acquires many local optima without moving the global one much.
+// Parameters below are CALIBRATED, not chosen: at weaker corrugation both
+// climbers find the optimum at every ruggedness and no inversion occurs, so the
+// animation would assert something false. Verified by sweep before shipping.
+const K = 9.0;
+const AMPLITUDE = 0.60;
+function fitness(x, y, rug) {
+  const smooth = -((x - 0.62) ** 2 + (y - 0.42) ** 2) * 2.2;
+  const corrug = Math.sin(K * x) * Math.sin(K * y);
+  return smooth + rug * AMPLITUDE * corrug;
+}
+
+const BUDGET = 120;      // evaluations per restart
+const RESTARTS = 30;     // paired across algorithms
+const SIGMA_A = 0.02;
+const SIGMA_B = 0.30;
+
+// The achievable optimum MOVES as the corrugation grows, so raw objective
+// values are not comparable across ruggedness settings. Scores are reported as
+// a fraction of each landscape's own optimum, which is what makes the sweep
+// chart a statement about search quality rather than about landscape scale.
+const extentCache = new Map();
+function globalExtent(rug) {
+  const key = rug.toFixed(4);
+  if (extentCache.has(key)) return extentCache.get(key);
+  let hi = -Infinity, lo = Infinity;
+  const N = 240;
+  for (let i = 0; i <= N; i++) {
+    for (let j = 0; j <= N; j++) {
+      const v = fitness(i / N, j / N, rug);
+      if (v > hi) hi = v;
+      if (v < lo) lo = v;
+    }
+  }
+  const ext = { hi, lo };
+  extentCache.set(key, ext);
+  return ext;
+}
+
+function climb(sigma, seed, rug) {
+  const r = rng(seed);
+  let x = r(), y = r();
+  let best = fitness(x, y, rug);
+  let bx = x, by = y;
+  for (let i = 1; i < BUDGET; i++) {
+    const nx = Math.min(1, Math.max(0, x + gauss(r) * sigma));
+    const ny = Math.min(1, Math.max(0, y + gauss(r) * sigma));
+    const v = fitness(nx, ny, rug);
+    if (v > best) { x = nx; y = ny; best = v; bx = nx; by = ny; }
+  }
+  const { hi, lo } = globalExtent(rug);
+  return { best: (best - lo) / (hi - lo), x: bx, y: by };
+}
+
+function trial(sigma, baseSeed, rug) {
+  const out = [];
+  for (let k = 0; k < RESTARTS; k++) out.push(climb(sigma, baseSeed + k * 7919, rug).best);
+  return out;
+}
+
+const median = a => { const s = [...a].sort((p, q) => p - q); const n = s.length;
+  return n % 2 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2; };
+const pct = (a, p) => { const s = [...a].sort((x, y) => x - y);
+  return s[Math.min(s.length - 1, Math.max(0, Math.round((s.length - 1) * p)))]; };
+
+// ---- rendering -------------------------------------------------------------
+const field = document.getElementById("field");
+const fctx = field.getContext("2d");
+const chart = document.getElementById("chart");
+const cctx = chart.getContext("2d");
+
+function drawField(rug, pointsA, pointsB) {
+  const W = field.width, H = field.height;
+  const img = fctx.createImageData(W, H);
+  let lo = Infinity, hi = -Infinity;
+  const vals = new Float64Array(W * H);
+  for (let j = 0; j < H; j++) {
+    for (let i = 0; i < W; i++) {
+      const v = fitness(i / W, j / H, rug);
+      vals[j * W + i] = v;
+      if (v < lo) lo = v; if (v > hi) hi = v;
+    }
+  }
+  for (let p = 0; p < vals.length; p++) {
+    const t = (vals[p] - lo) / (hi - lo || 1);
+    // dark-blue to warm-white ramp, readable when projected
+    const rr = Math.round(255 * Math.min(1, Math.max(0, 1.6 * t - 0.35)));
+    const gg = Math.round(255 * Math.min(1, Math.max(0, 1.5 * t - 0.20)));
+    const bb = Math.round(255 * Math.min(1, Math.max(0, 0.55 + 0.55 * t)));
+    img.data[p * 4] = rr; img.data[p * 4 + 1] = gg; img.data[p * 4 + 2] = bb; img.data[p * 4 + 3] = 255;
+  }
+  fctx.putImageData(img, 0, 0);
+
+  const mark = (pts, color) => {
+    fctx.fillStyle = color;
+    fctx.strokeStyle = "rgba(0,0,0,.65)"; fctx.lineWidth = 1.5;
+    for (const p of pts) {
+      fctx.beginPath();
+      fctx.arc(p.x * W, p.y * H, 4.5, 0, Math.PI * 2);
+      fctx.fill(); fctx.stroke();
+    }
+  };
+  if (pointsA) mark(pointsA, getComputedStyle(document.documentElement).getPropertyValue("--a").trim());
+  if (pointsB) mark(pointsB, getComputedStyle(document.documentElement).getPropertyValue("--b").trim());
+}
+
+let sweepData = null;
+function drawChart() {
+  const W = chart.width, H = chart.height, pad = 26;
+  cctx.clearRect(0, 0, W, H);
+  cctx.strokeStyle = "#2a2f3a"; cctx.lineWidth = 1;
+  cctx.beginPath(); cctx.moveTo(pad, 6); cctx.lineTo(pad, H - pad); cctx.lineTo(W - 6, H - pad); cctx.stroke();
+  cctx.fillStyle = "#9aa3b2"; cctx.font = "11px ui-sans-serif";
+  cctx.fillText("ruggedness →", W - 92, H - 8);
+  if (!sweepData) { cctx.fillText("run a sweep", pad + 10, H / 2); return; }
+
+  const all = sweepData.flatMap(d => [d.a, d.b]);
+  const lo = Math.min(...all), hi = Math.max(...all);
+  const X = i => pad + (W - pad - 10) * (i / (sweepData.length - 1));
+  const Y = v => (H - pad) - (H - pad - 10) * ((v - lo) / (hi - lo || 1));
+
+  const line = (key, color) => {
+    cctx.strokeStyle = color; cctx.lineWidth = 2; cctx.beginPath();
+    sweepData.forEach((d, i) => i ? cctx.lineTo(X(i), Y(d[key])) : cctx.moveTo(X(i), Y(d[key])));
+    cctx.stroke();
+  };
+  const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  line("a", css("--a")); line("b", css("--b"));
+
+  // mark the crossing
+  for (let i = 1; i < sweepData.length; i++) {
+    const prev = sweepData[i - 1], cur = sweepData[i];
+    if ((prev.a > prev.b) !== (cur.a > cur.b)) {
+      cctx.strokeStyle = css("--ok"); cctx.setLineDash([3, 3]); cctx.lineWidth = 1.5;
+      cctx.beginPath(); cctx.moveTo(X(i), 6); cctx.lineTo(X(i), H - pad); cctx.stroke();
+      cctx.setLineDash([]);
+      cctx.fillStyle = css("--ok");
+      cctx.fillText("rank inverts", Math.min(X(i) + 5, W - 74), 16);
+      break;
+    }
+  }
+}
+
+// ---- wiring ----------------------------------------------------------------
+const $ = id => document.getElementById(id);
+$("sigA").textContent = SIGMA_A; $("sigB").textContent = SIGMA_B;
+
+function currentRug() { return +$("rug").value / 100; }
+function currentSeed() { return (+$("seed").value | 0) >>> 0; }
+
+function run() {
+  const rug = currentRug(), seed = currentSeed();
+  const A = trial(SIGMA_A, seed, rug);
+  const B = trial(SIGMA_B, seed, rug);
+
+  const mA = median(A), mB = median(B);
+  let winsA = 0;
+  for (let k = 0; k < RESTARTS; k++) if (A[k] > B[k]) winsA++;
+
+  $("mA").textContent = mA.toFixed(3); $("mB").textContent = mB.toFixed(3);
+  $("qA").textContent = `${pct(A, .25).toFixed(2)}–${pct(A, .75).toFixed(2)}`;
+  $("qB").textContent = `${pct(B, .25).toFixed(2)}–${pct(B, .75).toFixed(2)}`;
+  $("wA").textContent = `${winsA}/${RESTARTS}`;
+  $("wB").textContent = `${RESTARTS - winsA}/${RESTARTS}`;
+
+  const lo = Math.min(mA, mB), hi = Math.max(mA, mB), span = Math.max(1e-9, hi - lo);
+  $("barA").style.width = `${10 + 90 * ((mA - lo) / span)}%`;
+  $("barB").style.width = `${10 + 90 * ((mB - lo) / span)}%`;
+
+  document.querySelectorAll("td").forEach(td => td.classList.remove("winner"));
+  ($(mA > mB ? "mA" : "mB")).classList.add("winner");
+
+  const lead = mA > mB ? "A (fine steps)" : "B (coarse steps)";
+  const why = mA > mB
+    ? "on a smooth surface small careful steps refine precisely, while large steps overshoot the optimum"
+    : "once the surface is corrugated, small steps are trapped by the first local optimum they meet";
+  $("verdict").innerHTML =
+    `At ruggedness ${rug.toFixed(2)}: <b>${lead}</b> wins <b>${Math.max(winsA, RESTARTS - winsA)}/${RESTARTS}</b> paired restarts — ${why}.` +
+    (mA > mB
+      ? ` <span style="color:var(--muted)">The margin is small because both algorithms reach the optimum here; the paired win count, not the median gap, is where A's advantage shows.</span>`
+      : "");
+
+  // show where the last restart of each ended up
+  const ptsA = [], ptsB = [];
+  for (let k = 0; k < 12; k++) {
+    ptsA.push(climb(SIGMA_A, seed + k * 7919, rug));
+    ptsB.push(climb(SIGMA_B, seed + k * 7919, rug));
+  }
+  drawField(rug, ptsA, ptsB);
+}
+
+function sweep() {
+  const seed = currentSeed();
+  sweepData = [];
+  for (let s = 0; s <= 20; s++) {
+    const rug = s / 20;
+    sweepData.push({ rug, a: median(trial(SIGMA_A, seed, rug)), b: median(trial(SIGMA_B, seed, rug)) });
+  }
+  drawChart();
+}
+
+$("rug").addEventListener("input", () => {
+  $("rugv").textContent = currentRug().toFixed(2);
+  drawField(currentRug(), null, null);
+});
+$("run").addEventListener("click", run);
+$("sweep").addEventListener("click", sweep);
+$("reset").addEventListener("click", () => {
+  $("rug").value = 0; $("rugv").textContent = "0.00";
+  sweepData = null; drawChart(); drawField(0, null, null);
+  $("verdict").innerHTML = "Press <b>Run</b> at ruggedness 0.";
+  ["mA","mB","qA","qB","wA","wB"].forEach(id => $(id).textContent = "—");
+  $("barA").style.width = "0"; $("barB").style.width = "0";
+});
+
+drawField(0, null, null);
+drawChart();
+</script>
+</body>
+</html>

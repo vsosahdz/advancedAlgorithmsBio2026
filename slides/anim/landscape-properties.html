@@ -1,0 +1,369 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>What makes a problem hard — five properties, seen</title>
+<style>
+  :root{--bg:#0f1115;--panel:#171a21;--line:#2a2f3a;--ink:#e8eaf0;--muted:#9aa3b2;
+        --ok:#3ddc84;--bad:#ff5c5c;--acc:#4ea1ff;--path:#ffc44d}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font:15px/1.55 ui-sans-serif,-apple-system,"Segoe UI",Roboto,sans-serif}
+  .wrap{max-width:1220px;margin:0 auto;padding:18px}
+  h1{font-size:19px;margin:0 0 2px;font-weight:650}
+  .sub{color:var(--muted);font-size:13px;margin-bottom:14px}
+  .tabs{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:14px}
+  .tabs button{background:#222836;color:var(--ink);border:1px solid var(--line);
+    border-radius:8px;padding:8px 14px;font:inherit;font-size:13px;cursor:pointer}
+  .tabs button:hover{background:#2b3244}
+  .tabs button.on{background:var(--acc);color:#06121f;border-color:var(--acc);font-weight:640}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media(max-width:860px){.two{grid-template-columns:1fr}}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:13px}
+  canvas{width:100%;height:auto;display:block;border-radius:6px;background:#0a0c10}
+  .cap{font-size:13px;font-weight:640;margin-bottom:7px;display:flex;align-items:center;gap:7px}
+  .dot{width:9px;height:9px;border-radius:50%}
+  .stat{font-size:12.5px;color:var(--muted);margin-top:8px;font-variant-numeric:tabular-nums;line-height:1.75}
+  .stat b{color:var(--ink)}
+  .explain{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+    padding:14px 16px;margin-top:14px;font-size:13.5px;line-height:1.6}
+  .explain h3{margin:0 0 6px;font-size:14px;color:var(--acc);font-weight:640}
+  .explain .conseq{margin-top:9px;padding-top:9px;border-top:1px solid var(--line);color:var(--muted)}
+  .explain .conseq b{color:var(--ink)}
+  .ctl{display:flex;gap:9px;align-items:center;margin-top:10px;flex-wrap:wrap}
+  .ctl button{background:#222836;color:var(--ink);border:1px solid var(--line);
+    border-radius:7px;padding:6px 12px;font:inherit;font-size:12.5px;cursor:pointer}
+  .ctl button:hover{background:#2b3244}
+  .legend{font-size:12px;color:var(--muted);margin-top:7px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>What makes a problem hard</h1>
+  <div class="sub">
+    Each property, next to a landscape that does not have it. Same colour scale,
+    same search, same budget — only the property changes.
+  </div>
+
+  <div class="tabs" id="tabs"></div>
+
+  <div class="two">
+    <div class="panel">
+      <div class="cap"><span class="dot" style="background:var(--ok)"></span><span id="capA">—</span></div>
+      <canvas id="cA" width="520" height="400"></canvas>
+      <div class="stat" id="statA">—</div>
+    </div>
+    <div class="panel">
+      <div class="cap"><span class="dot" style="background:var(--bad)"></span><span id="capB">—</span></div>
+      <canvas id="cB" width="520" height="400"></canvas>
+      <div class="stat" id="statB">—</div>
+    </div>
+  </div>
+
+  <div class="ctl">
+    <button id="run">Run a local search on both</button>
+    <button id="clear">Clear paths</button>
+    <span class="legend">
+      amber = the path a hill climber takes · white ring = where it ended ·
+      pink = the true global optimum
+    </span>
+  </div>
+
+  <div class="explain" id="explain"></div>
+</div>
+
+<script>
+"use strict";
+function rng(seed){let a=seed>>>0;return function(){a|=0;a=(a+0x6D2B79F5)|0;
+  let t=Math.imul(a^(a>>>15),1|a);t=(t+Math.imul(t^(t>>>7),61|t))^t;
+  return ((t^(t>>>14))>>>0)/4294967296;};}
+
+const G = (x,y,cx,cy,s)=>Math.exp(-(((x-cx)**2+(y-cy)**2))/(2*s*s));
+
+// Each property: a landscape WITHOUT it (a) and WITH it (b), plus where the
+// true optimum sits so a search can be scored rather than eyeballed.
+const PROPS = {
+  modality: {
+    label:"Modality",
+    title:"one basin, or many",
+    capA:"unimodal — one basin", capB:"multimodal — many basins",
+    a:(x,y)=>G(x,y,.62,.42,.26),
+    b:(x,y)=>1.00*G(x,y,.78,.24,.10) + .88*G(x,y,.24,.68,.12)
+            + .80*G(x,y,.58,.76,.09) + .74*G(x,y,.18,.22,.10),
+    optA:[.62,.42], optB:[.78,.24],
+    text:`<h3>Modality — how many basins of attraction</h3>
+      A unimodal landscape has one. Every downhill-refusing step moves you
+      toward the same place, so where you start does not matter.
+      <br><br>
+      Multimodal landscapes have several, each with its own catchment. A hill
+      climber ends in whichever basin it happened to start in.
+      <div class="conseq"><b>Consequence:</b> with many basins, a single run
+      tells you almost nothing — the result is a property of the starting point
+      as much as of the algorithm. This is the structural reason the assignment
+      demands 30 seeds rather than one good run.</div>`
+  },
+  ruggedness: {
+    label:"Ruggedness",
+    title:"how much a neighbour tells you",
+    capA:"smooth — ρ₁ near 1", capB:"rugged — ρ₁ near 0",
+    a:(x,y)=>G(x,y,.62,.42,.28),
+    b:(x,y)=>G(x,y,.62,.42,.28) + .35*Math.sin(130*x)*Math.sin(130*y),
+    optA:[.62,.42], optB:[.62,.42],
+    text:`<h3>Ruggedness — the correlation between neighbours</h3>
+      On the left, moving one step changes the objective a little and
+      predictably. On the right, the same step can change it by anything: the
+      neighbourhood carries almost no information about where to go next.
+      <br><br>
+      The number below each panel is the lag-1 autocorrelation of a random walk
+      — exactly what M0 Question 4 asks you to measure on your own instance.
+      <br><br>
+      <b>Ruggedness is not a property of the landscape alone.</b> It is a property
+      of the pair <em>(landscape, neighbourhood)</em>. The same surface measured
+      with a larger step looks more rugged, because a bigger move crosses more of
+      the corrugation. Change your neighbourhood definition and ρ₁ changes with
+      it — so reporting ρ₁ without saying what a "move" was is reporting half a
+      number.
+      <div class="conseq"><b>Consequence:</b> ρ₁ decides whether local search is
+      even justified. Near 1, following the neighbourhood is rational. Near 0,
+      a hill climber is an expensive random sampler, and that is an argument you
+      must make with the measurement rather than assume.</div>`
+  },
+  deception: {
+    label:"Deception",
+    title:"when the slope points the wrong way",
+    capA:"honest — the slope leads to the optimum", capB:"deceptive — it leads away",
+    a:(x,y)=>G(x,y,.75,.30,.22) + .45*G(x,y,.25,.70,.16),
+    b:(x,y)=>0.72*G(x,y,.25,.70,.30) + 1.00*G(x,y,.85,.15,.045),
+    optA:[.75,.30], optB:[.85,.15],
+    text:`<h3>Deception — local structure that misleads</h3>
+      On the right the global optimum is a narrow spike in the corner, and
+      almost the whole surface slopes toward a broad, comfortable, <em>wrong</em>
+      basin. Following the gradient is not a mistake here — it is exactly what
+      the landscape tells you to do, and it is wrong.
+      <br><br>
+      Deception is not the same as ruggedness: this surface is perfectly smooth.
+      <div class="conseq"><b>Consequence:</b> the mechanisms that escape a local
+      optimum by accepting a worsening move — annealing's temperature, tabu's
+      memory — exist for this. And no amount of restarting helps if the
+      deceptive basin also has the larger catchment.</div>`
+  },
+  separability: {
+    label:"Separability",
+    title:"can the variables be tuned one at a time?",
+    capA:"separable — f(x,y) = g(x) + h(y)", capB:"non-separable — the axes are coupled",
+    a:(x,y)=>-((x-.65)**2)*2.2 - ((y-.35)**2)*2.2 + 1,
+    b:(x,y)=>{const u=(x-.5)*0.7071+(y-.5)*0.7071, v=-(x-.5)*0.7071+(y-.5)*0.7071;
+              return -(u*u)*0.6 - (v*v)*9.0 + 1;},
+    optA:[.65,.35], optB:[.5,.5],
+    coordDescent:true,
+    text:`<h3>Separability — whether the variables interact</h3>
+      Press <b>Run</b>: the amber path is <em>coordinate descent</em> — optimize x
+      fully, then y fully, then stop.
+      <br><br>
+      On the left the contours are axis-aligned, so the best x does not depend
+      on y. Two sweeps and you are done. On the right the valley is rotated: the
+      best x depends on what y is, so each sweep undoes part of the last and the
+      search crawls along the valley floor.
+      <br><br>
+      A separable problem in n dimensions is really n problems in one dimension.
+      <div class="conseq"><b>Consequence:</b> <b>your assignment problem is not
+      separable</b>, and that is precisely what the coupling between the discrete
+      and continuous layers means — the best power depends on which sites are
+      active, and vice versa. It is why optimizing the layers one after the other
+      is measurably worse than optimizing them together, which M0 asks you to
+      demonstrate.</div>`
+  },
+  constraints: {
+    label:"Constraint geometry",
+    title:"is the feasible region even easy to reach?",
+    capA:"one convex feasible region", capB:"a thin corridor, and a second island",
+    a:(x,y)=>G(x,y,.5,.5,.22),
+    b:(x,y)=>G(x,y,.5,.5,.22),
+    feasA:(x,y)=>((x-.5)**2+(y-.5)**2) < .105,
+    feasB:(x,y)=>(Math.abs(y-0.5-0.22*Math.sin(5.2*x))<0.045 && x>0.08 && x<0.92)
+                 || ((x-.80)**2+(y-.84)**2) < .0045,
+    optA:[.5,.5], optB:[.5,.5],
+    text:`<h3>Constraint geometry — the shape of what is allowed</h3>
+      Both panels have the identical objective. Only the <em>feasible region</em>
+      (lit) differs.
+      <br><br>
+      On the right a random guess is almost never feasible, the feasible set is
+      disconnected, and moving between its parts requires passing through
+      infeasible territory. A search that rejects every infeasible point cannot
+      cross at all.
+      <div class="conseq"><b>Consequence:</b> this is why the assignment's
+      <code>evaluate()</code> returns a <em>graded</em> penalty rather than
+      rejecting infeasible solutions outright — a graded penalty gives search a
+      gradient back toward feasibility. On your instance roughly 12% of random
+      deployments satisfy connectivity, which you measure in M0 Question 3.</div>`
+  },
+};
+
+let current = "modality";
+const $ = id=>document.getElementById(id);
+const css = n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+// ---- rendering -------------------------------------------------------------
+function draw(canvas, f, feas, opt, path){
+  const ctx = canvas.getContext("2d"), W = canvas.width, H = canvas.height;
+  const img = ctx.createImageData(W,H);
+  const vals = new Float64Array(W*H);
+  let lo=Infinity, hi=-Infinity;
+  for(let j=0;j<H;j++) for(let i=0;i<W;i++){
+    const v=f(i/W, j/H); vals[j*W+i]=v; if(v<lo)lo=v; if(v>hi)hi=v;
+  }
+  for(let j=0;j<H;j++) for(let i=0;i<W;i++){
+    const p=(j*W+i), t=(vals[p]-lo)/((hi-lo)||1);
+    const ok = feas ? feas(i/W, j/H) : true;
+    const dim = ok ? 1 : 0.16;
+    img.data[p*4]   = Math.round(255*Math.min(1,Math.max(0,1.5*t-0.30))*dim);
+    img.data[p*4+1] = Math.round(255*Math.min(1,Math.max(0,1.4*t-0.18))*dim);
+    img.data[p*4+2] = Math.round(255*Math.min(1,Math.max(0,0.50+0.50*t))*dim);
+    img.data[p*4+3] = 255;
+  }
+  ctx.putImageData(img,0,0);
+
+  if(path && path.length){
+    ctx.strokeStyle=css("--path"); ctx.lineWidth=2; ctx.beginPath();
+    path.forEach((p,i)=> i?ctx.lineTo(p[0]*W,p[1]*H):ctx.moveTo(p[0]*W,p[1]*H));
+    ctx.stroke();
+    const last=path[path.length-1];
+    ctx.strokeStyle="#fff"; ctx.lineWidth=2.4;
+    ctx.beginPath(); ctx.arc(last[0]*W,last[1]*H,7,0,6.2832); ctx.stroke();
+  }
+  if(opt){
+    ctx.fillStyle="#ff5c8a";
+    ctx.beginPath(); ctx.arc(opt[0]*W,opt[1]*H,6,0,6.2832); ctx.fill();
+  }
+}
+
+// ---- measures --------------------------------------------------------------
+function autocorr(f, seed){
+  const r=rng(seed); let x=r(), y=r(); const s=[];
+  for(let k=0;k<3000;k++){
+    x=Math.min(1,Math.max(0,x+(r()*2-1)*0.02));
+    y=Math.min(1,Math.max(0,y+(r()*2-1)*0.02));
+    s.push(f(x,y));
+  }
+  const n=s.length-1;
+  const a=s.slice(0,n), b=s.slice(1);
+  const ma=a.reduce((p,q)=>p+q,0)/n, mb=b.reduce((p,q)=>p+q,0)/n;
+  let num=0,da=0,db=0;
+  for(let i=0;i<n;i++){ num+=(a[i]-ma)*(b[i]-mb); da+=(a[i]-ma)**2; db+=(b[i]-mb)**2; }
+  return num/Math.sqrt(da*db||1);
+}
+function basinsFound(f, opt, seed, tries=40){
+  const r=rng(seed); let hits=0;
+  for(let t=0;t<tries;t++){
+    let x=r(), y=r(), best=f(x,y);
+    for(let k=0;k<900;k++){
+      const nx=Math.min(1,Math.max(0,x+(r()*2-1)*0.045));
+      const ny=Math.min(1,Math.max(0,y+(r()*2-1)*0.045));
+      const v=f(nx,ny); if(v>best){x=nx;y=ny;best=v;}
+    }
+    if(Math.hypot(x-opt[0], y-opt[1])<0.08) hits++;
+  }
+  return hits/tries;
+}
+function feasibleFraction(feas, seed){
+  const r=rng(seed); let c=0;
+  for(let i=0;i<4000;i++) if(feas(r(), r())) c++;
+  return c/4000;
+}
+
+// ---- searches --------------------------------------------------------------
+function hillClimb(f, seed, feas){
+  const r=rng(seed); let x=r(), y=r();
+  if(feas){ let g=0; while(!feas(x,y) && g++<4000){ x=r(); y=r(); } }
+  let best=f(x,y); const path=[[x,y]];
+  for(let k=0;k<1200;k++){
+    const nx=Math.min(1,Math.max(0,x+(r()*2-1)*0.04));
+    const ny=Math.min(1,Math.max(0,y+(r()*2-1)*0.04));
+    if(feas && !feas(nx,ny)) continue;          // rejects infeasible outright
+    const v=f(nx,ny);
+    if(v>best){ x=nx; y=ny; best=v; path.push([x,y]); }
+  }
+  return {path, best, end:[x,y]};
+}
+function coordinateDescent(f, seed){
+  const r=rng(seed); let x=r()*0.25+0.05, y=r()*0.25+0.05;
+  const path=[[x,y]];
+  for(let sweep=0; sweep<8; sweep++){
+    let bx=x, bv=f(x,y);
+    for(let i=0;i<=200;i++){ const t=i/200; const v=f(t,y); if(v>bv){bv=v;bx=t;} }
+    x=bx; path.push([x,y]);
+    let by=y; bv=f(x,y);
+    for(let i=0;i<=200;i++){ const t=i/200; const v=f(x,t); if(v>bv){bv=v;by=t;} }
+    y=by; path.push([x,y]);
+  }
+  return {path, best:f(x,y), end:[x,y]};
+}
+
+// ---- wiring ----------------------------------------------------------------
+let paths = {a:null, b:null};
+
+function render(){
+  const P = PROPS[current];
+  $("capA").textContent = P.capA;
+  $("capB").textContent = P.capB;
+  $("explain").innerHTML = P.text;
+
+  draw($("cA"), P.a, P.feasA, P.optA, paths.a);
+  draw($("cB"), P.b, P.feasB, P.optB, paths.b);
+
+  if(current==="ruggedness"){
+    $("statA").innerHTML = `lag-1 autocorrelation <b>${autocorr(P.a,7).toFixed(3)}</b>`;
+    $("statB").innerHTML = `lag-1 autocorrelation <b>${autocorr(P.b,7).toFixed(3)}</b>`;
+  } else if(current==="modality"){
+    $("statA").innerHTML = `40 random starts reach the global optimum <b>${(100*basinsFound(P.a,P.optA,11)).toFixed(0)}%</b> of the time`;
+    $("statB").innerHTML = `40 random starts reach the global optimum <b>${(100*basinsFound(P.b,P.optB,11)).toFixed(0)}%</b> of the time`;
+  } else if(current==="deception"){
+    $("statA").innerHTML = `40 random starts reach the global optimum <b>${(100*basinsFound(P.a,P.optA,11)).toFixed(0)}%</b> of the time`;
+    $("statB").innerHTML = `40 random starts reach the global optimum <b>${(100*basinsFound(P.b,P.optB,11)).toFixed(0)}%</b> of the time`;
+  } else if(current==="constraints"){
+    $("statA").innerHTML = `a random guess is feasible <b>${(100*feasibleFraction(P.feasA,3)).toFixed(0)}%</b> of the time`;
+    $("statB").innerHTML = `a random guess is feasible <b>${(100*feasibleFraction(P.feasB,3)).toFixed(1)}%</b> of the time`;
+  } else {
+    $("statA").innerHTML = paths.a ? `coordinate descent reached <b>${paths.a.length-1}</b> sweeps from the optimum` : "press Run";
+    $("statB").innerHTML = paths.b ? `coordinate descent reached <b>${paths.b.length-1}</b> sweeps from the optimum` : "press Run";
+  }
+}
+
+function runSearch(){
+  const P = PROPS[current];
+  if(P.coordDescent){
+    const ra=coordinateDescent(P.a,5), rb=coordinateDescent(P.b,5);
+    paths={a:ra.path,b:rb.path};
+    render();
+    $("statA").innerHTML = `coordinate descent · final f = <b>${ra.best.toFixed(4)}</b> · distance to optimum <b>${Math.hypot(ra.end[0]-P.optA[0],ra.end[1]-P.optA[1]).toFixed(3)}</b>`;
+    $("statB").innerHTML = `coordinate descent · final f = <b>${rb.best.toFixed(4)}</b> · distance to optimum <b>${Math.hypot(rb.end[0]-P.optB[0],rb.end[1]-P.optB[1]).toFixed(3)}</b>`;
+  } else {
+    const ra=hillClimb(P.a,5,P.feasA), rb=hillClimb(P.b,5,P.feasB);
+    paths={a:ra.path,b:rb.path};
+    render();
+    $("statA").innerHTML += ` · this run ended <b>${Math.hypot(ra.end[0]-P.optA[0],ra.end[1]-P.optA[1]).toFixed(3)}</b> from the optimum`;
+    $("statB").innerHTML += ` · this run ended <b>${Math.hypot(rb.end[0]-P.optB[0],rb.end[1]-P.optB[1]).toFixed(3)}</b> from the optimum`;
+  }
+}
+
+const tabs=$("tabs");
+Object.entries(PROPS).forEach(([key,P])=>{
+  const b=document.createElement("button");
+  b.textContent=P.label; b.dataset.key=key;
+  b.addEventListener("click",()=>{
+    current=key; paths={a:null,b:null};
+    [...tabs.children].forEach(c=>c.classList.toggle("on", c.dataset.key===key));
+    render();
+  });
+  tabs.appendChild(b);
+});
+tabs.firstChild.classList.add("on");
+
+$("run").addEventListener("click", runSearch);
+$("clear").addEventListener("click", ()=>{ paths={a:null,b:null}; render(); });
+
+render();
+</script>
+</body>
+</html>
