@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ACO — pheromone, evaporation, and why bounds exist</title>
+<style>
+  :root{--bg:#0f1115;--panel:#171a21;--line:#2a2f3a;--ink:#e8eaf0;--muted:#9aa3b2;
+        --hot:#ffb037;--cold:#2b3446;--pick:#3ddc84;--warn:#ff5c5c;--acc:#4ea1ff}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font:15px/1.5 ui-sans-serif,-apple-system,"Segoe UI",Roboto,sans-serif}
+  .wrap{max-width:1200px;margin:0 auto;padding:20px}
+  h1{font-size:20px;margin:0 0 2px;font-weight:650}
+  .sub{color:var(--muted);font-size:13px;margin-bottom:16px}
+  .grid{display:grid;grid-template-columns:1fr 330px;gap:16px;align-items:start}
+  @media(max-width:900px){.grid{grid-template-columns:1fr}}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px}
+  canvas{width:100%;height:auto;display:block;border-radius:6px;background:#0a0c10}
+  .cap{font-size:13px;font-weight:600;margin-bottom:8px}
+  .row{display:flex;align-items:center;gap:10px;margin:9px 0}
+  label{font-size:13px;color:var(--muted);min-width:98px}
+  input[type=range]{flex:1;accent-color:var(--hot)}
+  .val{font-variant-numeric:tabular-nums;min-width:50px;text-align:right;font-size:13px}
+  button{background:#222836;color:var(--ink);border:1px solid var(--line);border-radius:7px;
+    padding:7px 13px;font:inherit;font-size:13px;cursor:pointer}
+  button:hover{background:#2b3244}
+  button.primary{background:var(--hot);color:#1c1000;border-color:var(--hot);font-weight:600}
+  button.danger{background:#3a1f22;border-color:#5b2b2f;color:#ffb3b3}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px}
+  td{padding:4px 6px;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}
+  td:last-child{text-align:right} td:first-child{color:var(--muted)}
+  .note{color:var(--muted);font-size:12px;line-height:1.55;margin-top:10px}
+  .bad{color:var(--warn);font-weight:600}
+  .good{color:var(--pick)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Stigmergy — memory that lives in the environment</h1>
+  <div class="sub">
+    No ant remembers anything. What persists is a change to the world that every
+    later ant reads, and every later ant writes.
+  </div>
+
+  <div class="grid">
+    <div class="panel">
+      <div class="cap">Candidate sites — brightness is pheromone, green ring means chosen this iteration</div>
+      <canvas id="field" width="740" height="320"></canvas>
+      <canvas id="bars" width="740" height="96" style="margin-top:10px"></canvas>
+      <div class="note">
+        Lower strip: pheromone per site, sorted. With bounds it stays a
+        distribution. Without them it becomes a spike — one site at enormous
+        value, everything else at zero — and the colony has stopped choosing.
+      </div>
+    </div>
+
+    <div>
+      <div class="panel">
+        <div class="row"><label for="rho">evaporation ρ</label>
+          <input id="rho" type="range" min="0" max="50" value="8"><span class="val" id="rhov">0.08</span></div>
+        <div class="row"><label for="alpha">α pheromone</label>
+          <input id="alpha" type="range" min="0" max="400" value="100"><span class="val" id="alphav">1.00</span></div>
+        <div class="row"><label for="beta">β heuristic</label>
+          <input id="beta" type="range" min="0" max="400" value="200"><span class="val" id="betav">2.00</span></div>
+        <div class="row">
+          <button id="play" class="primary">Play</button>
+          <button id="step">Step</button>
+          <button id="reset">Reset</button>
+        </div>
+        <div class="row">
+          <button id="bounds" class="danger" style="width:100%">MMAS bounds: ON — click to remove</button>
+        </div>
+        <table>
+          <tr><td>iteration</td><td id="it">0</td></tr>
+          <tr><td>best coverage</td><td id="best">—</td></tr>
+          <tr><td>distinct subsets / 10 ants</td><td id="distinct">—</td></tr>
+          <tr><td>selection entropy</td><td id="entropy">—</td></tr>
+          <tr><td>τ<sub>max</sub> / τ<sub>min</sub></td><td id="ratio">—</td></tr>
+        </table>
+      </div>
+
+      <div class="panel" style="margin-top:14px">
+        <div class="cap">Entropy — is the colony still searching?</div>
+        <canvas id="chart" width="300" height="140"></canvas>
+        <div class="note">
+          Entropy is of the pheromone-only selection distribution. Falling to
+          zero means every ant now builds the same subset. Comparing final
+          objective values cannot show this: a collapsed colony still reports a
+          number, and often a respectable one.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-top:16px">
+    <div class="note" style="margin:0">
+      <b style="color:var(--ink)">Turn the bounds off and watch.</b>
+      Measured on the course's own reference implementation, 5 000 evaluations,
+      same seed:
+      <br><br>
+      <span style="font-family:ui-monospace,monospace;font-size:12px">
+      with bounds&nbsp;&nbsp;&nbsp; entropy 4.382 → 3.279 &nbsp;·&nbsp; distinct subsets 10 → 6 &nbsp;·&nbsp; τ<sub>max</sub>/τ<sub>min</sub> = 49<br>
+      <span class="bad">without&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; entropy 4.382 → 2.996 &nbsp;·&nbsp; distinct subsets 10 → <b>1</b> &nbsp;·&nbsp; τ<sub>max</sub>/τ<sub>min</sub> = 7×10¹¹</span>
+      </span>
+      <br><br>
+      All ten ants end up constructing the identical subset. The colony is no
+      longer searching; it is re-deriving one answer, forever, at full budget.
+      The bounded run scores 0.7191 against 0.7091 unbounded — significant at
+      p = 0.0001 over 30 paired seeds.
+      <br><br>
+      Note what the early iterations look like: removing the bounds makes the
+      run improve <em>faster</em> at first. That is the trap. Rapid
+      intensification looks like progress right up until diversity is gone.
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+function rng(seed){let a=seed>>>0;return function(){a|=0;a=(a+0x6D2B79F5)|0;
+  let t=Math.imul(a^(a>>>15),1|a);t=(t+Math.imul(t^(t>>>7),61|t))^t;
+  return ((t^(t>>>14))>>>0)/4294967296;};}
+
+const NSITES=40, NANTS=10, PICKS=8, GRID=26;
+const TAU_MIN_RATIO=0.02;
+
+let sites=[], demand=[], reach=[], tau=[], st=null, useBounds=true;
+
+function buildWorld(seed){
+  const r=rng(seed);
+  sites=[]; for(let i=0;i<NSITES;i++) sites.push({x:0.05+0.9*r(), y:0.08+0.84*r()});
+  // demand field with three hotspots
+  const hs=[{x:0.25,y:0.3,s:0.10},{x:0.70,y:0.60,s:0.13},{x:0.50,y:0.18,s:0.08}];
+  demand=[]; const pts=[];
+  for(let a=0;a<GRID;a++)for(let b=0;b<GRID;b++){
+    const x=(a+0.5)/GRID, y=(b+0.5)/GRID; pts.push({x,y});
+    let d=0.25; for(const h of hs) d+=Math.exp(-(((x-h.x)**2+(y-h.y)**2))/(2*h.s*h.s));
+    demand.push(d);
+  }
+  const tot=demand.reduce((s,v)=>s+v,0); demand=demand.map(v=>v/tot);
+  const R=0.19;
+  reach = sites.map(s=>pts.map(p=>Math.hypot(p.x-s.x,p.y-s.y)<=R));
+  window.__pts=pts;
+}
+
+function coverageOf(active){
+  const cov=new Array(demand.length).fill(false);
+  active.forEach(i=>reach[i].forEach((ok,g)=>{ if(ok) cov[g]=true; }));
+  let s=0; for(let g=0;g<demand.length;g++) if(cov[g]) s+=demand[g];
+  return s;
+}
+
+function entropyOf(t,alpha){
+  const w=t.map(v=>Math.pow(v,alpha)); const s=w.reduce((a,b)=>a+b,0);
+  if(s<=0) return 0;
+  let e=0; for(const v of w){const p=v/s; if(p>0) e-=p*Math.log(p);}
+  return e;
+}
+
+const $=id=>document.getElementById(id);
+const RHO=()=>+$("rho").value/100, ALPHA=()=>+$("alpha").value/100, BETA=()=>+$("beta").value/100;
+
+function reset(){
+  buildWorld(20260914);
+  tau=new Array(NSITES).fill(1.0);
+  st={r:rng(20260914), it:0, best:0, lastPicked:new Set(), hist:[], distinct:NANTS,
+      tauMax:1, tauMin:TAU_MIN_RATIO};
+  render();
+}
+
+function stepOnce(){
+  const alpha=ALPHA(), beta=BETA(), rho=RHO();
+  const sols=[]; const signatures=new Set();
+
+  for(let a=0;a<NANTS;a++){
+    const active=[]; const uncov=demand.slice();
+    for(let k=0;k<PICKS;k++){
+      const marg=reach.map((rr,i)=>{
+        if(active.includes(i)) return 0;
+        let s=0; for(let g=0;g<uncov.length;g++) if(rr[g]) s+=uncov[g];
+        return s;
+      });
+      const w=marg.map((m,i)=>Math.pow(tau[i],alpha)*Math.pow(m,beta));
+      const tot=w.reduce((s,v)=>s+v,0);
+      if(tot<=0) break;
+      let x=st.r()*tot, pick=0;
+      for(let i=0;i<NSITES;i++){ x-=w[i]; if(x<=0){pick=i;break;} pick=i; }
+      active.push(pick);
+      reach[pick].forEach((ok,g)=>{ if(ok) uncov[g]=0; });
+    }
+    const val=coverageOf(active);
+    sols.push({val,active});
+    signatures.add([...active].sort((p,q)=>p-q).join(","));
+    if(val>st.best) st.best=val;
+  }
+
+  for(let i=0;i<NSITES;i++) tau[i]*=(1-rho);
+  const ib=sols.reduce((a,b)=>b.val>a.val?b:a);
+  ib.active.forEach(i=>{ tau[i]+=ib.val*rho; });
+
+  if(useBounds){
+    st.tauMax=Math.max(st.best,1e-9);
+    st.tauMin=TAU_MIN_RATIO*st.tauMax;
+    for(let i=0;i<NSITES;i++) tau[i]=Math.min(st.tauMax,Math.max(st.tauMin,tau[i]));
+  }
+
+  st.lastPicked=new Set(ib.active);
+  st.distinct=signatures.size;
+  st.it++;
+  st.hist.push({e:entropyOf(tau,alpha), d:signatures.size});
+}
+
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+function render(){
+  const cv=$("field"), ctx=cv.getContext("2d"), Wd=cv.width, H=cv.height;
+  ctx.clearRect(0,0,Wd,H);
+  ctx.fillStyle="#0a0c10"; ctx.fillRect(0,0,Wd,H);
+  // demand as faint dots
+  const pts=window.__pts;
+  const dmax=Math.max(...demand);
+  pts.forEach((p,g)=>{
+    const t=demand[g]/dmax;
+    ctx.fillStyle=`rgba(78,161,255,${0.05+0.22*t})`;
+    ctx.beginPath(); ctx.arc(p.x*Wd,p.y*H,2.2+3.4*t,0,6.2832); ctx.fill();
+  });
+
+  const tmax=Math.max(...tau), tmin=Math.min(...tau);
+  sites.forEach((s,i)=>{
+    const t=(tau[i]-tmin)/((tmax-tmin)||1);
+    ctx.fillStyle=`rgb(${Math.round(43+212*t)},${Math.round(52+124*t)},${Math.round(70-15*t)})`;
+    ctx.beginPath(); ctx.arc(s.x*Wd,s.y*H,5+7*t,0,6.2832); ctx.fill();
+    if(st.lastPicked.has(i)){
+      ctx.strokeStyle=css("--pick"); ctx.lineWidth=2.2;
+      ctx.beginPath(); ctx.arc(s.x*Wd,s.y*H,5+7*t+4,0,6.2832); ctx.stroke();
+    }
+  });
+
+  // sorted pheromone bars
+  const bc=$("bars"), bx=bc.getContext("2d"), BW=bc.width, BH=bc.height;
+  bx.clearRect(0,0,BW,BH);
+  const sorted=[...tau].sort((a,b)=>b-a);
+  const top=Math.max(...sorted,1e-12);
+  const w=BW/NSITES;
+  sorted.forEach((v,i)=>{
+    const h=(BH-14)*(v/top);
+    bx.fillStyle= v>=top*0.999 ? css("--warn") : css("--hot");
+    bx.fillRect(i*w+1, BH-10-h, w-2, h);
+  });
+  bx.fillStyle="#9aa3b2"; bx.font="10px ui-sans-serif";
+  bx.fillText("pheromone per site, sorted", 4, 10);
+
+  $("it").textContent=st.it;
+  $("best").textContent=st.best.toFixed(4);
+  $("distinct").innerHTML = st.distinct<=1
+    ? `<span class="bad">${st.distinct} — collapsed</span>`
+    : `<span class="good">${st.distinct}</span>`;
+  $("entropy").textContent=entropyOf(tau,ALPHA()).toFixed(3);
+  const ratio=tmax/Math.max(tmin,1e-12);
+  $("ratio").innerHTML = ratio>1e6
+    ? `<span class="bad">${ratio.toExponential(1)}</span>` : ratio.toFixed(1);
+
+  const cc=$("chart"), cx=cc.getContext("2d"), CW=cc.width, CH=cc.height, pad=24;
+  cx.clearRect(0,0,CW,CH);
+  cx.strokeStyle="#2a2f3a"; cx.beginPath();
+  cx.moveTo(pad,4); cx.lineTo(pad,CH-pad); cx.lineTo(CW-4,CH-pad); cx.stroke();
+  if(st.hist.length>1){
+    const emax=Math.max(...st.hist.map(h=>h.e),1e-9);
+    cx.strokeStyle=css("--acc"); cx.lineWidth=2; cx.beginPath();
+    st.hist.forEach((h,i)=>{
+      const x=pad+(CW-pad-4)*(i/Math.max(1,st.hist.length-1));
+      const y=(CH-pad)-(CH-pad-6)*(h.e/emax);
+      i?cx.lineTo(x,y):cx.moveTo(x,y);
+    });
+    cx.stroke();
+  }
+  cx.fillStyle="#9aa3b2"; cx.font="10px ui-sans-serif"; cx.fillText("iterations →",CW-70,CH-6);
+}
+
+let playing=false, raf=null;
+function loop(){ if(!playing) return; stepOnce(); render(); raf=requestAnimationFrame(loop); }
+
+["rho","alpha","beta"].forEach(id=>$(id).addEventListener("input",()=>{
+  $(id+"v").textContent=(+$(id).value/100).toFixed(2); }));
+$("step").addEventListener("click",()=>{stepOnce();render();});
+$("reset").addEventListener("click",()=>{playing=false;$("play").textContent="Play";
+  if(raf)cancelAnimationFrame(raf); reset();});
+$("play").addEventListener("click",()=>{playing=!playing;
+  $("play").textContent=playing?"Pause":"Play"; if(playing)loop();});
+$("bounds").addEventListener("click",()=>{
+  useBounds=!useBounds;
+  $("bounds").textContent = useBounds
+    ? "MMAS bounds: ON — click to remove"
+    : "MMAS bounds: OFF — watch it collapse";
+  $("bounds").style.background = useBounds ? "" : "#5b2b2f";
+});
+reset();
+</script>
+</body>
+</html>

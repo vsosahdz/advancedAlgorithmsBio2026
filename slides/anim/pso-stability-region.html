@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PSO stability region — what convergence does and does not mean</title>
+<style>
+  :root{--bg:#0f1115;--panel:#171a21;--line:#2a2f3a;--ink:#e8eaf0;--muted:#9aa3b2;
+        --in:#3ddc84;--out:#ff5c5c;--trace:#4ea1ff;--mark:#ffc44d}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font:15px/1.5 ui-sans-serif,-apple-system,"Segoe UI",Roboto,sans-serif}
+  .wrap{max-width:1180px;margin:0 auto;padding:20px}
+  h1{font-size:20px;margin:0 0 2px;font-weight:650}
+  .sub{color:var(--muted);font-size:13px;margin-bottom:16px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:900px){.grid{grid-template-columns:1fr}}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px}
+  canvas{width:100%;height:auto;display:block;border-radius:6px;background:#0a0c10;cursor:crosshair}
+  .cap{font-size:13px;font-weight:600;margin-bottom:8px}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin-top:10px}
+  td{padding:4px 6px;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}
+  td:last-child{text-align:right} td:first-child{color:var(--muted)}
+  .note{color:var(--muted);font-size:12px;line-height:1.55;margin-top:10px}
+  .preset{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+  button{background:#222836;color:var(--ink);border:1px solid var(--line);border-radius:7px;
+    padding:6px 11px;font:inherit;font-size:12px;cursor:pointer}
+  button:hover{background:#2b3244}
+  .verdict{margin-top:10px;padding:10px 12px;border-radius:8px;background:#10141b;
+    border:1px solid var(--line);font-size:13px;line-height:1.5}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>The stability region — and what it does not promise</h1>
+  <div class="sub">
+    Click anywhere in the (w, φ) plane. φ = c₁ + c₂. The shaded region is where
+    particle trajectories converge instead of diverging.
+  </div>
+
+  <div class="grid">
+    <div class="panel">
+      <div class="cap">Parameter plane</div>
+      <canvas id="region" width="520" height="420"></canvas>
+      <div class="preset">
+        <button data-w="0.7298" data-phi="2.9925">constriction (0.73, 2.99)</button>
+        <button data-w="0.7298" data-phi="3.0">c₁=0, c₂=3 — collapse</button>
+        <button data-w="1.2" data-phi="4.0">outside (1.2, 4.0)</button>
+        <button data-w="0.4" data-phi="0.3">over-damped (0.4, 0.3)</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="cap">One particle's position over time</div>
+      <canvas id="trace" width="520" height="260"></canvas>
+      <table>
+        <tr><td>w</td><td id="tw">—</td></tr>
+        <tr><td>φ = c₁ + c₂</td><td id="tphi">—</td></tr>
+        <tr><td>stability bound 2(1+w)</td><td id="tbound">—</td></tr>
+        <tr><td>verdict</td><td id="tverdict">—</td></tr>
+        <tr><td>|x| after 120 steps</td><td id="tfinal">—</td></tr>
+      </table>
+      <div class="verdict" id="verdict">Click the plane.</div>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-top:16px">
+    <div class="note" style="margin:0">
+      <b style="color:var(--ink)">What the region is, and what it is not.</b>
+      Inside it, the deterministic recurrence
+      x<sub>k+1</sub> = (1 + w − φ)x<sub>k</sub> − w·x<sub>k−1</sub>
+      has both roots inside the unit circle, so the trajectory converges to the
+      attractor set by the personal and neighbourhood bests. That is a statement
+      about the <em>dynamics</em>.
+      <br><br>
+      It says nothing about <em>where</em> the attractor is. Press
+      <b>“c₁=0, c₂=3”</b>: φ is unchanged, the point does not move, the verdict
+      still reads <span style="color:var(--in)">inside</span> — and yet every
+      particle is dragged straight onto the current global best, diversity
+      collapses, and the swarm stops searching. The plane cannot see that,
+      because φ is a sum and the split between c₁ and c₂ is invisible to it.
+      <br><br>
+      <b style="color:var(--ink)">This is the trap.</b> "PSO is guaranteed to
+      converge" is true of the trajectory and false of the optimum, and a
+      submission that cites the convergence result to explain a good <em>solution</em>
+      has cited a theorem about something else.
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+const W_MAX=1.5, PHI_MAX=5.0;
+let cw=0.7298, cphi=2.9925, split=0.5;   // split = c1/(c1+c2)
+
+const $=id=>document.getElementById(id);
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+// Deterministic PSO recurrence with the stochastic factors at their means.
+// x_{k+1} = (1 + w - phi) x_k - w x_{k-1}, measuring displacement from the
+// attractor, so convergence means |x| -> 0.
+function trajectory(w, phi, steps=120){
+  let xPrev=1.0, x=1.0, out=[x];
+  for(let k=0;k<steps;k++){
+    const nx=(1+w-phi)*x - w*xPrev;
+    xPrev=x; x=nx;
+    if(!isFinite(x) || Math.abs(x)>1e12){ out.push(NaN); break; }
+    out.push(x);
+  }
+  return out;
+}
+const stable=(w,phi)=> w<1 && phi>0 && phi<2*(1+w);
+
+function drawRegion(){
+  const cv=$("region"), ctx=cv.getContext("2d");
+  const Wd=cv.width,H=cv.height,pad=44;
+  ctx.clearRect(0,0,Wd,H);
+  const X=w=>pad+(Wd-pad-14)*(w/W_MAX);
+  const Y=p=>(H-pad)-(H-pad-14)*(p/PHI_MAX);
+
+  // shade the region by testing each pixel: the boundary is then exact rather
+  // than a drawn approximation of it
+  const img=ctx.createImageData(Wd,H);
+  for(let j=0;j<H;j++)for(let i=0;i<Wd;i++){
+    const w=(i-pad)/(Wd-pad-14)*W_MAX, p=((H-pad)-j)/(H-pad-14)*PHI_MAX;
+    const q=(j*Wd+i)*4;
+    if(i<pad||j>H-pad||w<0||p<0){img.data[q+3]=0;continue;}
+    if(stable(w,p)){img.data[q]=61;img.data[q+1]=220;img.data[q+2]=132;img.data[q+3]=46;}
+    else{img.data[q]=255;img.data[q+1]=92;img.data[q+2]=92;img.data[q+3]=26;}
+  }
+  ctx.putImageData(img,0,0);
+
+  ctx.strokeStyle="#2a2f3a";ctx.lineWidth=1;ctx.beginPath();
+  ctx.moveTo(pad,10);ctx.lineTo(pad,H-pad);ctx.lineTo(Wd-8,H-pad);ctx.stroke();
+  ctx.fillStyle="#9aa3b2";ctx.font="11px ui-sans-serif";
+  for(let w=0;w<=W_MAX;w+=0.5){ctx.fillText(w.toFixed(1),X(w)-8,H-pad+16);}
+  for(let p=0;p<=PHI_MAX;p+=1){ctx.fillText(p.toFixed(0),pad-20,Y(p)+4);}
+  ctx.fillText("w  (inertia) →",Wd-108,H-pad+30);
+  ctx.save();ctx.translate(12,H/2);ctx.rotate(-Math.PI/2);
+  ctx.fillText("φ = c₁ + c₂",0,0);ctx.restore();
+
+  // boundary phi = 2(1+w)
+  ctx.strokeStyle=css("--in");ctx.lineWidth=2;ctx.setLineDash([5,4]);ctx.beginPath();
+  let first=true;
+  for(let w=0;w<=1.0;w+=0.01){const p=2*(1+w); if(p>PHI_MAX)continue;
+    first?ctx.moveTo(X(w),Y(p)):ctx.lineTo(X(w),Y(p)); first=false;}
+  ctx.stroke();
+  ctx.beginPath();ctx.moveTo(X(1),Y(0));ctx.lineTo(X(1),Y(PHI_MAX));ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle=css("--in");ctx.fillText("φ = 2(1+w)",X(0.72),Y(3.7));
+  ctx.fillText("w = 1",X(1.02),Y(4.6));
+
+  ctx.fillStyle=css("--mark");
+  ctx.beginPath();ctx.arc(X(cw),Y(cphi),7,0,6.2832);ctx.fill();
+  ctx.strokeStyle="#0a0c10";ctx.lineWidth=2;ctx.stroke();
+}
+
+function drawTrace(){
+  const cv=$("trace"), ctx=cv.getContext("2d");
+  const Wd=cv.width,H=cv.height,pad=34;
+  ctx.clearRect(0,0,Wd,H);
+  const t=trajectory(cw,cphi);
+  const finite=t.filter(v=>isFinite(v));
+  const amp=Math.max(1e-9,...finite.map(Math.abs));
+  ctx.strokeStyle="#2a2f3a";ctx.beginPath();
+  ctx.moveTo(pad,8);ctx.lineTo(pad,H-pad);ctx.lineTo(Wd-8,H-pad);ctx.stroke();
+  const mid=(H-pad+8)/2;
+  ctx.strokeStyle="#232936";ctx.beginPath();ctx.moveTo(pad,mid);ctx.lineTo(Wd-8,mid);ctx.stroke();
+
+  ctx.strokeStyle=css("--trace");ctx.lineWidth=2;ctx.beginPath();
+  let broke=false;
+  t.forEach((v,i)=>{
+    if(!isFinite(v)){broke=true;return;}
+    if(broke)return;
+    const x=pad+(Wd-pad-8)*(i/(t.length-1));
+    const y=mid-(mid-10)*(v/amp);
+    i?ctx.lineTo(x,y):ctx.moveTo(x,y);
+  });
+  ctx.stroke();
+  ctx.fillStyle="#9aa3b2";ctx.font="11px ui-sans-serif";
+  ctx.fillText("displacement from attractor",pad+4,16);
+  ctx.fillText("iterations →",Wd-78,H-10);
+  if(broke){ctx.fillStyle=css("--out");ctx.fillText("diverged — overflow",pad+4,32);}
+
+  const ok=stable(cw,cphi);
+  const last=finite.length?Math.abs(finite[finite.length-1]):Infinity;
+  $("tw").textContent=cw.toFixed(4);
+  $("tphi").textContent=cphi.toFixed(4);
+  $("tbound").textContent=(2*(1+cw)).toFixed(4);
+  $("tverdict").innerHTML=ok?'<span style="color:var(--in)">inside</span>'
+                            :'<span style="color:var(--out)">outside</span>';
+  $("tfinal").textContent=isFinite(last)?last.toExponential(2):"overflow";
+
+  const c1=(cphi*split).toFixed(2), c2=(cphi*(1-split)).toFixed(2);
+  $("verdict").innerHTML = ok
+    ? `Trajectory converges: |x| falls to ${isFinite(last)?last.toExponential(1):"—"} in 120 steps.
+       <br><span style="color:var(--muted)">The swarm will settle. Whether it settles anywhere good is a
+       different question, and this plane cannot answer it — φ=${cphi.toFixed(2)} is the same point
+       whether (c₁,c₂) is (${c1},${c2}) or (0, ${cphi.toFixed(2)}).</span>`
+    : `Trajectory diverges. Particles accelerate out of the search space and
+       position clipping is all that keeps them in the box — which makes the
+       search a random walk on the boundary, not a swarm.`;
+}
+
+function setPoint(w,phi,sp){
+  cw=Math.max(0,Math.min(W_MAX,w));
+  cphi=Math.max(0,Math.min(PHI_MAX,phi));
+  if(sp!==undefined) split=sp;
+  drawRegion();drawTrace();
+}
+
+$("region").addEventListener("click",e=>{
+  const cv=$("region"), r=cv.getBoundingClientRect(), pad=44;
+  const px=(e.clientX-r.left)/r.width*cv.width, py=(e.clientY-r.top)/r.height*cv.height;
+  setPoint((px-pad)/(cv.width-pad-14)*W_MAX,
+           ((cv.height-pad)-py)/(cv.height-pad-14)*PHI_MAX, 0.5);
+});
+document.querySelectorAll(".preset button").forEach(b=>{
+  b.addEventListener("click",()=>{
+    const collapse=b.textContent.includes("collapse");
+    setPoint(+b.dataset.w, +b.dataset.phi, collapse?0:0.5);
+  });
+});
+setPoint(cw,cphi,0.5);
+</script>
+</body>
+</html>
