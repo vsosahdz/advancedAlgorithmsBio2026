@@ -1310,7 +1310,7 @@ while evals + L ≤ B:
 <div class="callout callout-warning no-icon callout-style-simple">
 <div class="callout-body">
 <div class="callout-content">
-<p>The last row is a <strong>budget</strong> decision, not an implementation detail. And it does not have one right answer: on the animation’s <span class="math inline">\(n=24\)</span> instance, dropping to <span class="math inline">\(L=2\)</span> buys <span class="math inline">\(12\times\)</span> the iterations and <em>loses</em> (<span class="math inline">\(0.4489\)</span>). On your <span class="math inline">\(n=80\)</span> instance, neighbours are strongly correlated — you measured <span class="math inline">\(\rho_1\)</span> in M0 — and sampling is expected to win. <strong>M1 asks you to find out which, on yours.</strong></p>
+<p>The last row is a <strong>budget</strong> decision, not an implementation detail. And it does not have one right answer: on the animation’s <span class="math inline">\(n=24\)</span> instance, dropping to <span class="math inline">\(L=2\)</span> buys <span class="math inline">\(12\times\)</span> the iterations and <em>loses</em> (<span class="math inline">\(0.4489\)</span>). On your <span class="math inline">\(n=80\)</span> instance, neighbours are strongly correlated — <span class="math inline">\(\rho_1 \approx 0.97\)</span> — and sampling is expected to win instead. <strong>Which holds on yours is something you measure.</strong></p>
 </div>
 </div>
 </div>
@@ -1531,7 +1531,7 @@ while evals + L ≤ B:
 <div class="callout callout-note no-icon callout-style-simple">
 <div class="callout-body">
 <div class="callout-content">
-<p>On <em>your</em> instance the ranking may differ. M2 asks you to measure it from the same seeds and attribute the difference to topology rather than to noise.</p>
+<p>On <em>your</em> instance the ranking may differ. Measure it from the same seeds, and attribute the difference to topology rather than to noise.</p>
 </div>
 </div>
 </div>
@@ -1579,6 +1579,19 @@ while evals + L ≤ B:
 </div>
 <div class="fragment">
 <p><strong>Tabu is handicapped the same way.</strong> Power frozen at nominal, it searches only the discrete layer: median 0.7157 against annealing’s 0.7288, winning 5 of 30 paired seeds, p = 2.4e-05. It loses — and that is a statement about <em>scope</em>, not about tabu search.</p>
+</div>
+</section>
+<section class="slide level2 smaller">
+<h2>Which is why they pair</h2>
+<pre><code>   tabu search  ──── subset ────▶  PSO
+   (discrete layer)                (continuous layer)</code></pre>
+<p>Tabu <strong>first</strong>, then PSO on the subset tabu produced. That ordering is not arbitrary: it is the only way PSO gets an input worth tuning, and it is the skeleton of every composed solver you will meet in this course.</p>
+<div class="callout callout-warning no-icon callout-style-simple">
+<div class="callout-body">
+<div class="callout-content">
+<p>It also fixes what each one is allowed to touch. The nominal power decides what tabu is searching over; the subset decides what PSO can reach. Change either and you have changed the other’s problem.</p>
+</div>
+</div>
 </div>
 </section>
 <section class="slide level2 smaller">
