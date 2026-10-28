@@ -3,7 +3,7 @@
 Tecnológico de Monterrey · doctoral programme
 Prof. Víctor Adrián Sosa Hernández
 
-Lecture material for the sessions covered so far.
+Lecture material for the sessions covered so far, and the capstone assignment.
 
 **Start at [`index.html`](index.html)** — open it in a browser and it links
 everything below. It is regenerated on every release, so a `git pull` brings
@@ -13,7 +13,31 @@ both the new session and the updated page.
 |---|---|
 | `slides/lesson-01.html` | landscapes · no free lunch · Monte Carlo · simulated annealing |
 | `slides/lesson-02.html` | tabu search · particle swarm optimization |
+| `slides/lesson-03.html` | PSO topologies · stability · ant colony optimization |
 | `slides/anim/` | the interactive animations, opened by the decks and usable on their own |
+
+## The assignment
+
+| | |
+|---|---|
+| `assignment-spec.pdf` | what to build, how it is graded, and the deadline |
+| `src/tc6035/` | the library that builds your instance |
+| `notebooks/00_instance_check.ipynb` | run this first — it builds your instance and proves your setup works |
+| `notebooks/m0`…`m3` | one notebook per milestone, to start from |
+| `PARAMETERS.md` | every parameter each technique takes, and how to set it |
+| `requirements.lock` | the exact versions this was tested against |
+
+In Colab, or anywhere `src` is not already on the path:
+
+```python
+import sys; sys.path.insert(0, "src")
+from tc6035 import build_instance, SensorPlacementProblem
+
+instance = build_instance("A01234567", salt=0)   # your ID
+problem  = SensorPlacementProblem(instance, budget=5000, seed=0)
+```
+
+Your video questions are in the Canvas announcement, against your student ID.
 
 ## Running the slides
 
@@ -44,9 +68,10 @@ the deck needs is already inside the file.
 
 ## The animations
 
-Five slides are live animations rather than pictures: the NFL rank inversion,
-the five landscape properties, simulated annealing, the tabu list, and the PSO
-velocity decomposition.
+Eight slides are live animations rather than pictures: the NFL rank inversion,
+the five landscape properties, simulated annealing, the tabu list, the PSO
+velocity decomposition, the three swarm topologies, the Clerc–Kennedy stability
+region, and the ACO pheromone bounds.
 
 **Drive them.** Press Play, move the sliders, change the seed and watch what
 happens. The parameters you are changing — tenure, candidate list size,
@@ -63,7 +88,7 @@ A grey page with a broken-file icon means the browser could not reach
 `anim/`. Two causes, in order of likelihood:
 
 1. The deck was moved away from its folder, or saved on its own. Keep
-   `lesson-01.html`, `lesson-02.html` and `anim/` in the same directory.
+   every `lesson-NN.html` and `anim/` in the same directory.
 2. Your browser blocks local pages from loading other local pages. Serve the
    folder instead — from inside `slides/`:
 
